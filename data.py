@@ -1,11 +1,15 @@
 import random
-from states import user, S1, S2, S3, S5, S7, str_to_class
+from states import user, str_to_class
+import json
+
+class Timer:
+    def __init__ (self, time):
+        self.curr_time = time
 
 def get_next_states(prev_state):
     num_possible_next_states = min(len(prev_state.next_state), 2)
-    #num_next_states = random.randint(0, num_possible_next_states)
-    num_next_states = max(0, num_possible_next_states)
-    print(prev_state, "Num next states", num_next_states)
+    num_next_states = random.randint(1, num_possible_next_states)
+    #num_next_states = max(0, num_possible_next_states)
     states = []
     index_visited = []
     for _ in range(num_next_states):
@@ -16,23 +20,20 @@ def get_next_states(prev_state):
         states.append(state)
     return states
 
-def iterate_state(prev_state, subtasks, time, process_id):
+def iterate_state(prev_state, subtasks, Timer, process_id):
     states = get_next_states(prev_state)
-    print("Num states: ", states)
     for state in states:
-        print("State: ", state)
-        subtasks.append([prev_state, state, time, process_id])
-        time +=100
-        if len(state.next_state) == 0:
-            print("No iterar")
-        else: 
-            iterate_state(state, subtasks, time, process_id)
-        time += 100
-        subtasks.append([state,prev_state, time, process_id])
+      
+        Timer.curr_time += state.time
+        subtasks.append([prev_state, state, "Request", Timer.curr_time, process_id])
+        if len(state.next_state) != 0:
+            iterate_state(state, subtasks, Timer, process_id)
+        Timer.curr_time  += state.time
+        subtasks.append([state,prev_state, "Response", Timer.curr_time, process_id])
     
 
-def create_processes(N=1):
-    init_time = 100
+def create_data(N=100000):
+    global_time = 0
     subtasks = []
 
     for i in range(N):
@@ -40,27 +41,28 @@ def create_processes(N=1):
         prev_state = user
 
         process_id = f"process{i+1}"
-        iterate_state(prev_state, subtasks, init_time, process_id)
+        timer = Timer(global_time)
+        iterate_state(prev_state, subtasks_i, timer, process_id)
+        subtasks += subtasks_i
 
-        init_time+=100
+        global_time+=random.randint(0,1000)
 
-    print(subtasks)
+    serializable_subtasks = []
+    for subtask in subtasks:
+        state_from, state_to, action, time, process_id = subtask
+        subtask_dict = {
+            'state_from': state_from.__name__ if hasattr(state_from, '__name__') else state_from,
+            'state_to': state_to.__name__ if hasattr(state_to, '__name__') else state_to,
+            'action': action,
+            'time': time,
+            'process_id': process_id
+        }
+        serializable_subtasks.append(subtask_dict)
+
+    with open("data_processes.json", 'w') as f:
+        json.dump(serializable_subtasks, f, indent=4)
 
 
 
 
-create_processes()
-
-
-
-"""
-  while len(state.next_state) != 0:
-            
-            prev_state = state
-            state = get_next_states(prev_state)
-            sequence.append(state)
-
-            subtasks.append([prev_state, state, aux_time])
-            aux_time += 100
-
-"""
+create_data()
