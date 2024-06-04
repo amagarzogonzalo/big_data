@@ -8,13 +8,13 @@ class State:
     next_state = None
 
 class user(State):
-    next_state = ["S2", "S3"]
+    next_state = ["S1"]
 
 class S1(State):
-    next_state = ["S2", "S5"]
+    next_state = ["S2", "S3"]
 
 class S2(State):
-    next_state = ["S3", "S7"]
+    next_state = ["S7"]
 
 class S3(State):
     next_state = ["S5"]
