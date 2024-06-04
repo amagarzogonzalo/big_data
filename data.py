@@ -32,7 +32,7 @@ def iterate_state(prev_state, subtasks, Timer, process_id):
         subtasks.append([state,prev_state, "Response", Timer.curr_time, process_id])
     
 
-def create_data(N=100000):
+def create_data(N=1000):
     global_time = 0
     subtasks = []
 
@@ -53,14 +53,12 @@ def create_data(N=100000):
         subtask_dict = {
             'state_from': state_from.__name__ if hasattr(state_from, '__name__') else state_from,
             'state_to': state_to.__name__ if hasattr(state_to, '__name__') else state_to,
-            'action': action,
-            'time': time,
-            'process_id': process_id
+            'action': action,'time': time,'process_id': process_id
         }
         serializable_subtasks.append(subtask_dict)
 
     with open("data_processes.json", 'w') as f:
-        json.dump(serializable_subtasks, f, indent=4)
+        json.dump(serializable_subtasks, f, indent="")
 
 
 
