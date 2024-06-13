@@ -57,7 +57,7 @@ def create_data(N=1000):
         }
         serializable_subtasks.append(subtask_dict)
 
-    with open("data_processes.json", 'w') as f:
+    with open("Data/data_processes.json", 'w') as f:
         json.dump(serializable_subtasks, f, indent="")
 
 
