@@ -18,12 +18,18 @@ class S2(State):
     next_state = ["S7"]
 
 class S3(State):
-    next_state = ["S5"]
+    next_state = ["S5", "S6", "S8"]
 
 class S5(State):
     next_state = []
 
+class S6(State):
+    next_state = ["S7"]
+
 class S7(State):
+    next_state = []
+
+class S8(State):
     next_state = []
 
 class T():

@@ -16,6 +16,8 @@ def get_server_names(rdd, without_user: bool = True):
         server_names.remove("user")
     return server_names
 
+print(get_server_names(rdd))
+
 def request_path(process):
     for log in process:
         if log['action'] == 'Request':
@@ -28,6 +30,8 @@ def request_path(process):
 def get_processes_request_paths(rdd):
     return rdd.sortBy(lambda x: x['time']).groupBy(lambda x: x['process_id'])\
             .mapValues(request_path).collect()
+
+#print(get_processes_request_paths(rdd))
 
 def servers_depth(request_path: str):
     requests = [request.split(":") for request in request_path.split("-")]
@@ -55,8 +59,38 @@ def get_logs_with_depth(rdd):
     return rdd.groupBy(lambda x: x['process_id']) \
             .mapValues(list) \
             .mapValues(lambda logs: add_depth_to_logs(logs, depths)) \
-            .flatMap(lambda x: x[1]).collect() 
+            .flatMap(lambda x: x[1])
     
+def get_server_connections(rdd):
+    reqs_with_depth = get_logs_with_depth(rdd).filter(lambda x: x['action']=="Request")
+    server_connections = {}
+    for server_name in get_server_names(rdd):
+        server_connections[server_name] =  set(reqs_with_depth.filter(lambda x: x['state_to'] == server_name) \
+                                            .map(lambda x: (x['state_from'], 'X', x['depth_from'])) \
+                                            .distinct().collect()).union(
+                                        set(reqs_with_depth.filter(lambda x: x['state_from'] == server_name) \
+                                        .map(lambda x: ('X', x['state_to'], x['depth_from'])) \
+                                        .distinct().collect())
+                                            )   
+    return server_connections
+
+def jaccard_similarity(a, b):
+    assert type(a)==set and type(b)==set
+    return len(a.intersection(b)) / len(a.union(b))
+
+def jaccard_distance(a, b):
+    return 1-jaccard_similarity(a, b)
+
+
+
+
+
+""" conn = get_server_connections(rdd)
+print(conn)
+print(jaccard_distance(conn['S5'], conn['S8'])) """
+
+
+
 
 
 def print_common_transitions(rdd):
