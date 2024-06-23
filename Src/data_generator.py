@@ -1,5 +1,5 @@
 import random
-from states import user, str_to_class
+from states import user, str_to_class, create_hierarchy_classes
 import json
 import os
 
@@ -7,8 +7,8 @@ class Timer:
     def __init__ (self, time):
         self.curr_time = time
 
-def get_next_states(prev_state):
-    num_possible_next_states = min(len(prev_state.next_state), 2)
+def get_next_states(prev_state, num_max_child):
+    num_possible_next_states = min(len(prev_state.next_state), num_max_child) # set max child per server call
     num_next_states = random.randint(1, num_possible_next_states)
     #num_next_states = max(0, num_possible_next_states)
     states = []
@@ -21,30 +21,34 @@ def get_next_states(prev_state):
         states.append(state)
     return states
 
-def iterate_state(prev_state, subtasks, Timer, process_id):
-    states = get_next_states(prev_state)
+def iterate_state(prev_state, subtasks, Timer, process_id, num_max_child, curr_depth, max_depth):
+    states = get_next_states(prev_state, num_max_child)
     for state in states:
       
         Timer.curr_time += state.time
         subtasks.append([prev_state, state, "Request", Timer.curr_time, process_id])
-        if len(state.next_state) != 0:
-            iterate_state(state, subtasks, Timer, process_id)
+        if len(state.next_state) != 0 and curr_depth<= max_depth :
+            iterate_state(state, subtasks, Timer, process_id, num_max_child, curr_depth+1, max_depth)
         Timer.curr_time  += state.time
         subtasks.append([state,prev_state, "Response", Timer.curr_time, process_id])
     
 
-def create_data(namefile = "data_processes.json",distinct_process = 10, num_process=2):
+
+
+
+
+def create_data(num_child_user = 5, num_states = 500, namefile = "data_processes.json",distinct_process = 10, num_process=2, num_max_child = 2, max_depth = 3):
     global_time = 0
     aux_processes, processes = [], []
-
-
+    states, init_state = create_hierarchy_classes(num_states, num_child_user)
+    print(init_state)
     for i in range(distinct_process):
         processs_i = []
-        prev_state = user
+        prev_state = init_state
 
         process_id = f"process{i+1}"
         timer = Timer(global_time)
-        iterate_state(prev_state, processs_i, timer, process_id)
+        iterate_state(prev_state, processs_i, timer, process_id, num_max_child, 0, max_depth)
         #print("proce    ", processs_i)
         aux_processes.append(processs_i)
 
