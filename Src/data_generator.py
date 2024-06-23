@@ -37,7 +37,7 @@ def iterate_state(prev_state, subtasks, Timer, process_id, num_max_child, curr_d
 
 
 
-def create_data(num_child_user = 5, num_states = 500, namefile = "data_processes.json",distinct_process = 10, num_process=2, num_max_child = 2, max_depth = 3):
+def create_data(num_child_user = 5, num_states = 500, namefile = "data_processes.json",distinct_process = 100, num_process=1000, num_max_child = 2, max_depth = 3):
     global_time = 0
     aux_processes, processes = [], []
     states, init_state = create_hierarchy_classes(num_states, num_child_user)
@@ -61,10 +61,12 @@ def create_data(num_child_user = 5, num_states = 500, namefile = "data_processes
         processs_i = []
 
         timer = Timer(real_time)
+        process_id = f"process{i+1}"
 
         process_i = random.choice(aux_processes)
         process_i = [[real_time + j * random.randint(100,110) if isinstance(process_i[j][i], (int, float)) else process_i[j][i] for i in range(len(process_i[j]))] for j in range(len(process_i))]
 
+        process_i = [[process_id if isinstance(process_i[j][i], str) and  process_i[j][i].startswith("process") else process_i[j][i] for i in range(len(process_i[j]))] for j in range(len(process_i))]
 
         print(process_i)
         real_time+=100
