@@ -3,6 +3,7 @@ from states import user, str_to_class, create_hierarchy_classes
 import json
 import os
 
+
 class Timer:
     def __init__ (self, time):
         self.curr_time = time
@@ -33,15 +34,11 @@ def iterate_state(prev_state, subtasks, Timer, process_id, num_max_child, curr_d
         subtasks.append([state,prev_state, "Response", Timer.curr_time, process_id])
     
 
-
-
-
-
 def create_data(num_child_user = 5, num_states = 500, namefile = "data_processes.json",distinct_process = 100, num_process=1000, num_max_child = 2, max_depth = 3):
     global_time = 0
     aux_processes, processes = [], []
     states, init_state = create_hierarchy_classes(num_states, num_child_user)
-    print(init_state)
+    #print(init_state)
     for i in range(distinct_process):
         processs_i = []
         prev_state = init_state
@@ -68,7 +65,7 @@ def create_data(num_child_user = 5, num_states = 500, namefile = "data_processes
 
         process_i = [[process_id if isinstance(process_i[j][i], str) and  process_i[j][i].startswith("process") else process_i[j][i] for i in range(len(process_i[j]))] for j in range(len(process_i))]
 
-        print(process_i)
+        #print(process_i)
         real_time+=100
         processes.append( process_i)
 
@@ -89,12 +86,18 @@ def create_data(num_child_user = 5, num_states = 500, namefile = "data_processes
             }
             serializable_subtasks.append(subtask_dict)
 
-
-    path = os.path.join(os.path.dirname(os.getcwd()), "Data", namefile)
+    path = os.path.join(os.getcwd(), "Data", namefile)
     with open(path, 'w') as f:
-        json.dump(serializable_subtasks, f, indent="")
+        for i, d in enumerate(serializable_subtasks):
+            # Serialize dictionary to JSON string
+            json_str = json.dumps(d)
+            # Write the JSON string to file
+            f.write(json_str)
+            # Add a comma if it's not the last dictionary
+            if i < len(serializable_subtasks) - 1:
+                f.write(',\n')
 
-
-
+"""   for task in serializable_subtasks:
+    json.dump(task, f, indent="") """
 
 create_data()
