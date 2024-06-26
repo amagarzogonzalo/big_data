@@ -1,3 +1,4 @@
+import numpy as np
 from pyspark.ml.feature import HashingTF, MinHashLSH
 from pyspark.sql import Row
 from pyspark.sql.functions import lit, udf, col, explode
@@ -41,6 +42,7 @@ def request_path(process):
     str
         The constructed request path.
     """
+    #TODO: Refactor including a reduce function
     for log in process:
         if log['action'] == 'Request':
             if log['state_from'] == 'user':
@@ -161,7 +163,8 @@ def get_string_server_connections(logs_with_depth_rdd):
         An RDD of tuples where each tuple contains a server name and a list of all server connections represented as strings.
     """
     server_connections = []
-    for server_name in get_server_names(logs_rdd=logs_with_depth_rdd):
+    # Create one entry in the array for each server except the user (incoming requests from user are captured anyways)
+    for server_name in get_server_names(logs_rdd=logs_with_depth_rdd): 
 
         # Find incoming requests connections to the server and map them into string representations
         incoming_connections = set(logs_with_depth_rdd.filter(lambda x: x['action']=="Request" and x['state_to'] == server_name) \
@@ -185,9 +188,71 @@ def jaccard_similarity(a, b):
 def jaccard_distance(a, b):
     return 1-jaccard_similarity(a, b)
 
+def check_distance_simetry(distances):
+    swapped_distances = distances.select(
+        col("server_name_A").alias("server_name_B"),
+        col("server_name_B").alias("server_name_A"),
+        col("JaccardDistance").alias("swapped_JaccardDistance")
+    )
+
+    # Join the original DataFrame with the swapped DataFrame
+    joined_df = distances.join(
+        swapped_distances,
+        (distances.server_name_A == swapped_distances.server_name_A) &
+        (distances.server_name_B == swapped_distances.server_name_B)
+    )
+
+    # Check that there are now columns with different distances
+    return joined_df.filter(col("JaccardDistance") != col("swapped_JaccardDistance")).rdd.isEmpty()
+
+def lower_triangle_matrix_index(i, j):
+    # Ensure that we are only accesing elements in the lower triangle matrix.
+    assert j>=0 and i>j
+    return int((i-1)*(i-2)*(1/2) + j)
+
+def create_server_distance_array(distances_df, server_names):
+    distance_array = np.zeros(shape=(int((len(server_names))*(len(server_names)-1)*(1/2)), ) )
+    
+    for i in range(1, len(server_names)):
+        for j in range(0, i):
+            search = distances_df.filter((col("server_name_A") == server_names[i]) & (col("server_name_B") == server_names[j]))
+
+            # If there is no element in the distance df, then assume they are far away and set distance to 1.
+            if search.isEmpty():
+                distance_array[lower_triangle_matrix_index(i, j)] = 1
+            else:
+                distance_array[lower_triangle_matrix_index(i, j)] = search.collect()[0].__getitem__("JaccardDistance")
+    return distance_array
+
+def get_server_clusters(distances_rdd, server_names):
+    all_related_servers = distances_rdd.map(lambda x: x["server_name_A"]).distinct().collect()
+    alone_servers = list(set(server_names) - set(all_related_servers)) 
+    server_clusters = distances_rdd.filter(lambda x: x["JaccardDistance"] < 1e-3) \
+                            .map(lambda x: (x['server_name_A'], x['server_name_B'])) \
+                            .reduceByKey(lambda s1, s2: '+'.join([s1,s2])).collect()
+    if len(alone_servers)>0:
+        return server_clusters.join(sc.parallelize(alone_servers).map(lambda x: (x,x)))
+    return server_clusters
+ 
+def add_cluster_column(servers_df, distances_rdd):
+    server_clusters = get_server_clusters(distances_rdd, 
+                                          server_names = servers_df.select("server_name") \
+                                                    .rdd.flatMap(lambda x: x).collect() )
+
+    # Broadcast to all worker nodes a dictionary mapping server names to their clusters
+    cluster_broadcast = servers_df.rdd.context.broadcast({server: cluster for server, cluster in server_clusters})
+    
+    # Define a UDF to get the cluster from the broadcasted dictionary
+    def get_cluster(server_name):
+        return cluster_broadcast.value.get(server_name, server_name)
+    get_cluster_udf = udf(get_cluster, StringType())
+    
+    return servers_df.withColumn("cluster", get_cluster_udf(servers_df["server_name"]))
+    
+
 if __name__ == "__main__":
 
-    # Read log file and create original log df
+    # Read log file and create original log d
     DATASET_NAME = "data_processes_v2.json"
     logs_df = spark.read.json("Data/"+DATASET_NAME)
 
@@ -200,34 +265,43 @@ if __name__ == "__main__":
 
     # Create servers df with an extra column connections that contains an array of strings.
     # String represent the connection tuples (Related_server, Request_type, Depth) but concatenating all elements as strings.
+    server_names = get_server_names(logs_rdd=logs_df.rdd)
     servers_df = spark.createDataFrame(data=get_string_server_connections(logs_with_depth_rdd = logs_with_depth_df.rdd),
                                        schema=StructType([
                                                 StructField("server_name", StringType(), True),
                                                 StructField("connections", ArrayType(StringType()), True)
                                             ])
                                        )
-    servers_df.show()
 
     distinct_connections = servers_df.select(explode(col("connections")).alias("connection")).distinct().count()
-    print(f"Number of different connections: {distinct_connections}")
+    #print(f"Number of different connections: {distinct_connections}")
 
     # Add a column to servers df representing the identirty matrix of the set of connections (as numFeatures=distinct_connections)
     # If we see that number of distinct connections is too high we could set a maximun
     hashingTF = HashingTF(inputCol="connections", outputCol="features", numFeatures=distinct_connections)
     features_server_df = hashingTF.transform(servers_df)
-    features_server_df.show()
 
     # Add a column to servers df indicating the hashes of the columns of the signature/representation matrix.
-    mh = MinHashLSH(inputCol="features", outputCol="hashes", numHashTables=5)
+    mh = MinHashLSH(inputCol="features", outputCol="hashes", numHashTables=10)
+    #TODO: Decide the number of hash tables
     model = mh.fit(features_server_df)
-    transformedData = model.transform(features_server_df)
-    transformedData.show()
+    transformedData = model.transform(features_server_df)  
 
     # Perform clustering with LSH by giving a Jaccard distance threshold.
-    model.approxSimilarityJoin(datasetA=features_server_df, datasetB=features_server_df, 
-                            threshold=0.7, distCol="JaccardDistance").select(
-                                col("datasetA.server_name").alias("server_name_A"),
-                                col("datasetB.server_name").alias("server_name_B"),
-                                col("JaccardDistance")
-                            ).show()   
+    approx_Jaccard_distances = model.approxSimilarityJoin(datasetA=features_server_df, datasetB=features_server_df, 
+                                threshold=0.5, distCol="JaccardDistance").select(
+                                    col("datasetA.server_name").alias("server_name_A"),
+                                    col("datasetB.server_name").alias("server_name_B"),
+                                    col("JaccardDistance")
+                                )
     
+    # TEST: Ensure that the approximate distances provides by the algorithm are symetric
+    # assert check_distance_simetry(approx_Jaccard_distances)
+
+    servers_with_cluster_df = add_cluster_column(servers_df=servers_df, 
+                                                 distances_rdd=approx_Jaccard_distances.rdd)
+    servers_with_cluster_df.show()
+
+    """ server_distance_array = create_server_distance_array(distances_df=approx_Jaccard_distances,
+                                                         server_names=server_names) """
+        
