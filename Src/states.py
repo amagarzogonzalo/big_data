@@ -1,6 +1,7 @@
 import sys
 import random
 import inspect
+import string 
 
 
 def str_to_class(classname):
@@ -53,48 +54,44 @@ def create_Sx_class(x, next_states=[]):
     return new_class
 
 
-def create_hierarchy_classes(num_classes, num_child_user):
-    classes = {}
-    class_name = "user"
-    next_states = []
+def create_tasks(n_task, n_servers, max_servers_per_task=5):
+    unique_tasks = set()  
+    tasks = []
+    task_server = {"user": "user"}
+    server_count = 1
+    while len(tasks) < n_task:
+        t = random.randint(0, n_task * 10000)  
+        if t not in unique_tasks:
+            unique_tasks.add(t)
+            tasks.append(t)
+            n_servers = random.randint(1, max_servers_per_task)
+            servers_for_t = [server_count + i for i in range(n_servers)]
+            server_count+=n_servers
+
+            task_server[t] = servers_for_t
 
 
-    for j in range(1, num_child_user):
-        next_states.append(f"S{j}")
+    return task_server, tasks
 
-    attrs = {
-        'next_state': next_states
-    }
-    #print("childs of user ", attrs)
-    init_class = type(class_name, (State,), attrs)
-    classes[class_name] = init_class
-    setattr(sys.modules[__name__], class_name, init_class) 
 
-    for i in range(1, num_classes + 1):
-        class_name = f"S{i}"
-        next_states = []
 
-        for j in range(i + 1, num_classes + 1):
-            if random.randint(0, 10) > 5 and j > num_child_user:
-                next_states.append(f"S{j}")
+def create_classes(tasks, n_task):
 
-        attrs = {
-            'next_state': next_states
-        }
-        #print(attrs)
+    classes  =[]
+
+
+    attrs = {'next_state': tasks}
+    user = type("user", (State,), attrs)
+    setattr(sys.modules[__name__], "user", user)
+    classes.append(user) # we first add user
+    for t in tasks:
+        class_name = str(t)
+        attrs = {'next_state': tasks}
         new_class = type(class_name, (State,), attrs)
-        #classes[class_name] = new_class
-        setattr(sys.modules[__name__], class_name, new_class) 
+        setattr(sys.modules[__name__], class_name, new_class)
+        classes.append(new_class)
+    return classes, user
 
-                # Obtener todos los miembros del módulo actual (__name__)
-    """members = inspect.getmembers(sys.modules['states'])
 
-    # Filtrar solo las clases
-    classes = [member for member in members if inspect.isclass(member[1])]
-
-    # Imprimir los nombres de las clases encontradas
-    for name, _ in classes:
-        print(name)"""
-
-    
-    return classes, init_class
+def create_hierarchy_classes(task, num_child_user):
+    return None, None
