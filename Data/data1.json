@@ -1,0 +1,72 @@
+[
+    {
+        "state_from": "user",
+        "state_to": "S5",
+        "action": "Request",
+        "time": 100,
+        "process_id": "process1"
+    },
+    {
+        "state_from": "S5",
+        "state_to": "S3",
+        "action": "Request",
+        "time": 200,
+        "process_id": "process1"
+    },
+    {
+        "state_from": "S3",
+        "state_to": "S17",
+        "action": "Request",
+        "time": 300,
+        "process_id": "process1"
+    },
+    {
+        "state_from": "S17",
+        "state_to": "S4",
+        "action": "Request",
+        "time": 400,
+        "process_id": "process1"
+    },
+    {
+        "state_from": "S4",
+        "state_to": "S29",
+        "action": "Request",
+        "time": 416,
+        "process_id": "process1"
+    },
+    {
+        "state_from": "S29",
+        "state_to": "S4",
+        "action": "Response",
+        "time": 600,
+        "process_id": "process1"
+    },
+    {
+        "state_from": "S4",
+        "state_to": "S17",
+        "action": "Response",
+        "time": 700,
+        "process_id": "process1"
+    },
+    {
+        "state_from": "S17",
+        "state_to": "S3",
+        "action": "Response",
+        "time": 800,
+        "process_id": "process1"
+    },
+    {
+        "state_from": "S3",
+        "state_to": "S5",
+        "action": "Response",
+        "time": 900,
+        "process_id": "process1"
+    },
+    {
+        "state_from": "S5",
+        "state_to": "user",
+        "action": "Response",
+        "time": 1000,
+        "process_id": "process1"
+    }
+]
