@@ -1,6 +1,7 @@
 import random
 from states import user, str_to_class, create_tasks, create_classes
 import json
+import copy
 import os
 
 
@@ -78,11 +79,12 @@ def init_data(namefile = "data1.json",distinct_process = 1, num_process=2, num_m
         global_time+=random.randint(0,1000)
 
     real_time = 0
-    processesreal = []
-
+    processesreal = [None] * num_process 
+    timer = Timer(real_time)
+    real_time = 0
+    process_i = None
     for i in range(0, num_process):
 
-        timer = Timer(real_time)
         id = f"process{i+1}"
 
         #  + j * random.randint(100,110) 
@@ -90,7 +92,7 @@ def init_data(namefile = "data1.json",distinct_process = 1, num_process=2, num_m
         for k in range(len(process_i)):
             for j in range(len(process_i[k])):
                 if j == 3:
-                    f = k * random.randint(10,11) 
+                    f = random.randint(5,11) 
                     process_i[k][j] = real_time + f
                     real_time += f
                 if j == 4:
@@ -99,43 +101,46 @@ def init_data(namefile = "data1.json",distinct_process = 1, num_process=2, num_m
        
         #print(id)
         real_time+=10
-        #print(process_i)
-        processesreal.append(process_i)
-
-       # print(processesreal)
+        p = copy.deepcopy(process_i)
+        processesreal[i] = p
+    
     #print(processesreal)
     serializable_subtasks = []
     for p in range(len(processesreal)):
         dictt = {}
         for subtask in processesreal[p]:
+            #print(subtask)
             state_from, state_to, action, time, process_id, taskin, taskout = subtask
             if state_from not in dictt:
                 if state_from == "user":
                     dictt[state_from] = "user"
-                else:
+
+                if isinstance(state_from,str) and state_from != "user":
+
                     dictt[state_from] = random.choice(tasks_servers[int(taskin.__name__)]) if isinstance(tasks_servers[int(taskin.__name__)], list) else tasks_servers[int(taskin.__name__)]
             if state_from == "user":
                 serverfrom =str(dictt[state_from])
-            else:
+            if isinstance(state_from,str) and state_from != "user":
                 serverfrom ="S"+str(dictt[state_from])
 
 
             if state_to not in dictt:
                 if state_to == "user":
                     dictt[state_to] = "user"
-                else:
+                if isinstance(state_to,str) and state_to != "user":
                     dictt[state_to] = random.choice(tasks_servers[int(taskout.__name__)]) if isinstance(tasks_servers[int(taskout.__name__)], list) else tasks_servers[int(taskout.__name__)]
             if state_to == "user":
                 serverto= str(dictt[state_to])
-            else:
+            if isinstance(state_to,str) and state_to != "user":
                 serverto = "S"+str(dictt[state_to])
 
             subtask_dict = {
-                'state_from': serverfrom,
-                'state_to': serverto,
+                'state_from ': serverfrom,
+                'state_to ': serverto,
                 'action': action,'time': time,'process_id': process_id
             }
             serializable_subtasks.append(subtask_dict)
+        print(dictt)
 
     path = os.path.join(os.getcwd(), "Data", namefile)
     
