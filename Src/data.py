@@ -1,5 +1,5 @@
 import random
-from states import user, str_to_class, create_hierarchy_classes, create_tasks, create_classes
+from states import user, str_to_class, create_tasks, create_classes
 import json
 import os
 
@@ -13,7 +13,6 @@ def get_next_states(prev_state, num_max_child, list_states, tasks_servers, contr
     num_next_states = random.randint(1, num_possible_next_states)
     if num_next_states == 0:
         return None, None, False
-    #num_next_states = max(0, num_possible_next_states)
     states, servers = [], []
     index_visited = []
     for _ in range(num_next_states):
@@ -29,7 +28,6 @@ def get_next_states(prev_state, num_max_child, list_states, tasks_servers, contr
                 state = str_to_class(str(state_name))
                 states.append(state)
                 servers.append(random.choice(tasks_servers[int(state.__name__)]) if isinstance(tasks_servers[int(state.__name__)], list) else tasks_servers[int(state.__name__)])
-                #print(states,"_--", servers)
                 break  
         
     return states, servers, True
@@ -39,20 +37,16 @@ def iterate_state(prev_state, subtasks, Timer, process_id, num_max_child, curr_d
     
     if check is True:
         
-        #print(states)
         for state,server in zip(states,servers):
-            #print(state, server)
 
-            #print(state, "_", type(state))
             Timer.curr_time += state.time
             list_states.add(int(state.__name__))
-            #print(prev_server, "---", server)
             prev_server, server = str(prev_server), "S"+str(server)
-            subtasks.append([prev_server, server, "Request", Timer.curr_time, process_id])
+            subtasks.append([prev_server, server, "Request", Timer.curr_time, process_id, prev_state, state])
             if len(state.next_state) != 0 and curr_depth< max_depth :
                 iterate_state(state, subtasks, Timer, process_id, num_max_child, curr_depth+1, max_depth, list_states, tasks_servers, server)
             Timer.curr_time  += state.time
-            subtasks.append([server, prev_server, "Response", Timer.curr_time, process_id])
+            subtasks.append([server, prev_server, "Response", Timer.curr_time, process_id, prev_state, state])
         
 
 
@@ -64,14 +58,13 @@ def iterate_state(prev_state, subtasks, Timer, process_id, num_max_child, curr_d
 
     
 
-def init_data( num_child_user = 5, num_states = 500, namefile = "data1.json",distinct_process = 1, num_process=1, num_max_child = 1, max_depth = 4,
-               n_tasks= 10, n_servers=100):
+def init_data(namefile = "data1.json",distinct_process = 4000, num_process=100, num_max_child = 2, max_depth = 2,
+               n_tasks= 1000, n_servers=50000):
     tasks_servers, tasks = create_tasks(n_tasks, n_servers)
     classes, prev_state = create_classes(tasks, n_tasks)
     
     global_time = 0
-    #print(tasks)
-    aux_processes, processes = [], []
+    aux_processes = []
     for i in range(distinct_process):
         processs_i = []
 
@@ -80,36 +73,41 @@ def init_data( num_child_user = 5, num_states = 500, namefile = "data1.json",dis
         list_states = set()
         list_states.add(prev_state.__name__)
         iterate_state(prev_state, processs_i, timer, process_id, num_max_child, 0, max_depth, list_states, tasks_servers, "user")
-        #print("proce    ", processs_i)
         aux_processes.append(processs_i)
-        #print("ii" *100, processs_i)
 
         global_time+=random.randint(0,1000)
-    #print(aux_processes)
 
     real_time = 0
+    processesreal = []
 
-    for i in range(num_process):
-        processs_i = []
+    for i in range(0, num_process):
 
         timer = Timer(real_time)
-        process_id = f"process{i+1}"
+        id = f"process{i+1}"
 
+        #  + j * random.randint(100,110) 
         process_i = random.choice(aux_processes)
-        process_i = [[real_time + j * random.randint(100,110) if isinstance(process_i[j][i], (int, float)) and j == 4 else process_i[j][i] for i in range(len(process_i[j]))] for j in range(len(process_i))]
-
-        #process_i = [[process_id if isinstance(process_i[j][i], str) and  process_i[j][i].startswith("process") else process_i[j][i] for i in range(len(process_i[j]))] for j in range(len(process_i))]
-
+        for k in range(len(process_i)):
+            for j in range(len(process_i[k])):
+                if j == 3:
+                    f = k * random.randint(10,11) 
+                    process_i[k][j] = real_time + f
+                    real_time += f
+                if j == 4:
+                    #print(k, "pro: ", process_i[k][j], " por ", id)
+                    process_i[k][j] = id
+       
+        #print(id)
+        real_time+=10
         #print(process_i)
-        real_time+=100
-        processes.append( process_i)
-    #print(processes)
-    #print("ffff")
-    #print(aux_processes)
+        processesreal.append(process_i)
+
+       # print(processesreal)
+    #print(processesreal)
     serializable_subtasks = []
-    for p in processes:
-        for subtask in p:
-            state_from, state_to, action, time, process_id = subtask
+    for p in range(len(processesreal)):
+        for subtask in processesreal[p]:
+            state_from, state_to, action, time, process_id, _, _ = subtask
             subtask_dict = {
                 'state_from': state_from,
                 'state_to': state_to,
@@ -117,9 +115,9 @@ def init_data( num_child_user = 5, num_states = 500, namefile = "data1.json",dis
             }
             serializable_subtasks.append(subtask_dict)
 
-    #print("................................................", processes)
     path = os.path.join(os.getcwd(), "Data", namefile)
     
+    #os.remove(path)
 
     with open(path, 'w') as f:
         json.dump(serializable_subtasks, f, indent=4)
@@ -127,4 +125,3 @@ def init_data( num_child_user = 5, num_states = 500, namefile = "data1.json",dis
 
 init_data()
 
-#create_data()

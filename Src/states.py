@@ -15,29 +15,7 @@ class State:
 class user(State):
     next_state = ["S1"]
 
-class S1(State):
-    next_state = ["S2", "S3"]
 
-class S2(State):
-    next_state = ["S7"]
-
-class S3(State):
-    next_state = ["S5", "S6", "S8"]
-
-class S5(State):
-    next_state = []
-
-class S6(State):
-    next_state = ["S7"]
-
-class S7(State):
-    next_state = []
-
-class S8(State):
-    next_state = []
-
-class T():
-    nex_state = []
 
 
 def create_Sx_class(x, next_states=[]):
@@ -92,6 +70,3 @@ def create_classes(tasks, n_task):
         classes.append(new_class)
     return classes, user
 
-
-def create_hierarchy_classes(task, num_child_user):
-    return None, None
