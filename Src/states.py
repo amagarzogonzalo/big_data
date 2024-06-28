@@ -32,7 +32,7 @@ def create_Sx_class(x, next_states=[]):
     return new_class
 
 
-def create_tasks(n_task, n_servers, max_servers_per_task=100):
+def create_tasks(n_task, n_servers, max_servers_per_task=500):
     unique_tasks = set()  
     tasks = []
     task_server = {"user": "user"}
@@ -42,7 +42,7 @@ def create_tasks(n_task, n_servers, max_servers_per_task=100):
         if t not in unique_tasks:
             unique_tasks.add(t)
             tasks.append(t)
-            n_servers = random.randint(10, max_servers_per_task)
+            n_servers = random.randint(max_servers_per_task/10, max_servers_per_task)
             servers_for_t = [server_count + i for i in range(n_servers)]
             server_count+=n_servers
 

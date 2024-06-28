@@ -1,310 +1,114 @@
 [
     {
         "state_from ": "user",
-        "state_to ": "S5320",
+        "state_to ": "S212821",
         "action": "Request",
         "time": 6,
         "process_id": "process1"
     },
     {
-        "state_from ": "S5320",
-        "state_to ": "S25519",
+        "state_from ": "S212821",
+        "state_to ": "S84786",
         "action": "Request",
-        "time": 13,
+        "time": 17,
         "process_id": "process1"
     },
     {
-        "state_from ": "S25519",
-        "state_to ": "S28260",
+        "state_from ": "S84786",
+        "state_to ": "S90665",
         "action": "Request",
-        "time": 23,
+        "time": 25,
         "process_id": "process1"
     },
     {
-        "state_from ": "S28260",
-        "state_to ": "S25519",
+        "state_from ": "S90665",
+        "state_to ": "S84786",
         "action": "Response",
-        "time": 29,
+        "time": 33,
         "process_id": "process1"
     },
     {
-        "state_from ": "S25519",
-        "state_to ": "S5320",
-        "action": "Response",
-        "time": 39,
-        "process_id": "process1"
-    },
-    {
-        "state_from ": "S5320",
-        "state_to ": "S45125",
+        "state_from ": "S84786",
+        "state_to ": "S33334",
         "action": "Request",
-        "time": 47,
+        "time": 40,
         "process_id": "process1"
     },
     {
-        "state_from ": "S45125",
-        "state_to ": "S7417",
-        "action": "Request",
-        "time": 52,
-        "process_id": "process1"
-    },
-    {
-        "state_from ": "S7417",
-        "state_to ": "S45125",
+        "state_from ": "S33334",
+        "state_to ": "S84786",
         "action": "Response",
-        "time": 63,
+        "time": 48,
         "process_id": "process1"
     },
     {
-        "state_from ": "S45125",
-        "state_to ": "S5320",
+        "state_from ": "S84786",
+        "state_to ": "S212821",
         "action": "Response",
-        "time": 68,
+        "time": 59,
         "process_id": "process1"
     },
     {
-        "state_from ": "S5320",
+        "state_from ": "S212821",
         "state_to ": "user",
         "action": "Response",
-        "time": 77,
+        "time": 69,
         "process_id": "process1"
     },
     {
         "state_from ": "user",
-        "state_to ": "S22218",
+        "state_to ": "S213043",
         "action": "Request",
-        "time": 87,
-        "process_id": "process1"
+        "time": 88,
+        "process_id": "process2"
     },
     {
-        "state_from ": "S22218",
-        "state_to ": "S19905",
+        "state_from ": "S213043",
+        "state_to ": "S84836",
         "action": "Request",
-        "time": 92,
-        "process_id": "process1"
+        "time": 98,
+        "process_id": "process2"
     },
     {
-        "state_from ": "S19905",
-        "state_to ": "S47757",
+        "state_from ": "S84836",
+        "state_to ": "S90701",
         "action": "Request",
-        "time": 101,
-        "process_id": "process1"
+        "time": 106,
+        "process_id": "process2"
     },
     {
-        "state_from ": "S47757",
-        "state_to ": "S19905",
+        "state_from ": "S90701",
+        "state_to ": "S84836",
         "action": "Response",
-        "time": 109,
-        "process_id": "process1"
+        "time": 113,
+        "process_id": "process2"
     },
     {
-        "state_from ": "S19905",
-        "state_to ": "S45588",
+        "state_from ": "S84836",
+        "state_to ": "S33098",
         "action": "Request",
-        "time": 117,
-        "process_id": "process1"
+        "time": 119,
+        "process_id": "process2"
     },
     {
-        "state_from ": "S45588",
-        "state_to ": "S19905",
+        "state_from ": "S33098",
+        "state_to ": "S84836",
         "action": "Response",
-        "time": 128,
-        "process_id": "process1"
+        "time": 130,
+        "process_id": "process2"
     },
     {
-        "state_from ": "S19905",
-        "state_to ": "S22218",
+        "state_from ": "S84836",
+        "state_to ": "S213043",
         "action": "Response",
-        "time": 137,
-        "process_id": "process1"
+        "time": 141,
+        "process_id": "process2"
     },
     {
-        "state_from ": "S22218",
-        "state_to ": "S28720",
-        "action": "Request",
-        "time": 143,
-        "process_id": "process1"
-    },
-    {
-        "state_from ": "S28720",
-        "state_to ": "S14777",
-        "action": "Request",
-        "time": 148,
-        "process_id": "process1"
-    },
-    {
-        "state_from ": "S14777",
-        "state_to ": "S28720",
-        "action": "Response",
-        "time": 154,
-        "process_id": "process1"
-    },
-    {
-        "state_from ": "S28720",
-        "state_to ": "S22218",
-        "action": "Response",
-        "time": 162,
-        "process_id": "process1"
-    },
-    {
-        "state_from ": "S22218",
+        "state_from ": "S213043",
         "state_to ": "user",
         "action": "Response",
-        "time": 169,
-        "process_id": "process1"
-    },
-    {
-        "state_from ": "user",
-        "state_to ": "S5330",
-        "action": "Request",
-        "time": 186,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S5330",
-        "state_to ": "S25487",
-        "action": "Request",
-        "time": 195,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S25487",
-        "state_to ": "S28273",
-        "action": "Request",
-        "time": 204,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S28273",
-        "state_to ": "S25487",
-        "action": "Response",
-        "time": 211,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S25487",
-        "state_to ": "S5330",
-        "action": "Response",
-        "time": 221,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S5330",
-        "state_to ": "S45159",
-        "action": "Request",
-        "time": 227,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S45159",
-        "state_to ": "S7392",
-        "action": "Request",
-        "time": 232,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S7392",
-        "state_to ": "S45159",
-        "action": "Response",
-        "time": 238,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S45159",
-        "state_to ": "S5330",
-        "action": "Response",
-        "time": 249,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S5330",
-        "state_to ": "user",
-        "action": "Response",
-        "time": 256,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "user",
-        "state_to ": "S22230",
-        "action": "Request",
-        "time": 264,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S22230",
-        "state_to ": "S19885",
-        "action": "Request",
-        "time": 269,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S19885",
-        "state_to ": "S47803",
-        "action": "Request",
-        "time": 280,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S47803",
-        "state_to ": "S19885",
-        "action": "Response",
-        "time": 288,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S19885",
-        "state_to ": "S45536",
-        "action": "Request",
-        "time": 293,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S45536",
-        "state_to ": "S19885",
-        "action": "Response",
-        "time": 298,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S19885",
-        "state_to ": "S22230",
-        "action": "Response",
-        "time": 304,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S22230",
-        "state_to ": "S28722",
-        "action": "Request",
-        "time": 314,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S28722",
-        "state_to ": "S14763",
-        "action": "Request",
-        "time": 321,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S14763",
-        "state_to ": "S28722",
-        "action": "Response",
-        "time": 331,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S28722",
-        "state_to ": "S22230",
-        "action": "Response",
-        "time": 339,
-        "process_id": "process2"
-    },
-    {
-        "state_from ": "S22230",
-        "state_to ": "user",
-        "action": "Response",
-        "time": 347,
+        "time": 152,
         "process_id": "process2"
     }
 ]
