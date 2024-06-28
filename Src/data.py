@@ -8,7 +8,7 @@ class Timer:
     def __init__ (self, time):
         self.curr_time = time
 
-def get_next_states(prev_state, num_max_child, list_states, tasks_servers):
+def get_next_states(prev_state, num_max_child, list_states, tasks_servers, control=10):
     num_possible_next_states = min(len(prev_state.next_state), num_max_child) # set max child per server call
     num_next_states = random.randint(1, num_possible_next_states)
     #num_next_states = max(0, num_possible_next_states)
@@ -21,22 +21,24 @@ def get_next_states(prev_state, num_max_child, list_states, tasks_servers):
             state_name = prev_state.next_state[index_state]
             e+=1
             #print(list_states, "ej; ", state_name)
-
-            if index_state not in index_visited and state_name not in list_states and e < 1000:
+            print(list_states, "::", state_name)
+            
+            if index_state not in index_visited and state_name not in list_states and e < control:
                 index_visited.append(index_state)
                 state = str_to_class(str(state_name))
                 states.append(state)
+                list_states.append(states)
                 servers.append(random.choice(tasks_servers[int(state.__name__)]) if isinstance(tasks_servers[int(state.__name__)], list) else tasks_servers[int(state.__name__)])
                 break  
         
-    return states, servers
+    return states, servers, True
 
 def iterate_state(prev_state, subtasks, Timer, process_id, num_max_child, curr_depth, max_depth, list_states, tasks_servers, prev_server):
-    states, servers = get_next_states(prev_state, num_max_child, list_states, tasks_servers)
+    states, servers, check = get_next_states(prev_state, num_max_child, list_states, tasks_servers)
     
+    print(states)
     for state,server in zip(states,servers):
-        server = random.choice(tasks_servers[int(state.__name__)]) if isinstance(tasks_servers[int(state.__name__)], list) else tasks_servers[int(state.__name__)] # select server randomly from task
-
+        print(state, server)
 
         #print(state, "_", type(state))
         Timer.curr_time += state.time
