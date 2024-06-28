@@ -58,7 +58,7 @@ def iterate_state(prev_state, subtasks, Timer, process_id, num_max_child, curr_d
 
     
 
-def init_data(namefile = "data1.json",distinct_process = 4000, num_process=100, num_max_child = 2, max_depth = 2,
+def init_data(namefile = "data1.json",distinct_process = 1, num_process=2, num_max_child = 2, max_depth = 2,
                n_tasks= 1000, n_servers=50000):
     tasks_servers, tasks = create_tasks(n_tasks, n_servers)
     classes, prev_state = create_classes(tasks, n_tasks)
@@ -106,11 +106,33 @@ def init_data(namefile = "data1.json",distinct_process = 4000, num_process=100, 
     #print(processesreal)
     serializable_subtasks = []
     for p in range(len(processesreal)):
+        dictt = {}
         for subtask in processesreal[p]:
-            state_from, state_to, action, time, process_id, _, _ = subtask
+            state_from, state_to, action, time, process_id, taskin, taskout = subtask
+            if state_from not in dictt:
+                if state_from == "user":
+                    dictt[state_from] = "user"
+                else:
+                    dictt[state_from] = random.choice(tasks_servers[int(taskin.__name__)]) if isinstance(tasks_servers[int(taskin.__name__)], list) else tasks_servers[int(taskin.__name__)]
+            if state_from == "user":
+                serverfrom =str(dictt[state_from])
+            else:
+                serverfrom ="S"+str(dictt[state_from])
+
+
+            if state_to not in dictt:
+                if state_to == "user":
+                    dictt[state_to] = "user"
+                else:
+                    dictt[state_to] = random.choice(tasks_servers[int(taskout.__name__)]) if isinstance(tasks_servers[int(taskout.__name__)], list) else tasks_servers[int(taskout.__name__)]
+            if state_to == "user":
+                serverto= str(dictt[state_to])
+            else:
+                serverto = "S"+str(dictt[state_to])
+
             subtask_dict = {
-                'state_from': state_from,
-                'state_to': state_to,
+                'state_from': serverfrom,
+                'state_to': serverto,
                 'action': action,'time': time,'process_id': process_id
             }
             serializable_subtasks.append(subtask_dict)
