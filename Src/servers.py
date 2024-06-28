@@ -1,8 +1,10 @@
-import string
 import itertools
+import math
+import string
 
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
+from pyspark.sql.window import Window
 
 def get_server_names(logs_rdd, without_user: bool = True):
     """
@@ -118,24 +120,26 @@ def add_cluster_column(servers_df, distances_rdd):
         """ Generate as many unique identifiers using A-Z characters as number of clusters  """
         characters = string.ascii_uppercase
         # Compute how many characters will the identifiers have
-        nr_characters_in_id = 1
-        while num_clusters > len(characters)**nr_characters_in_id:
-            nr_characters_in_id += 1
+        nr_characters_in_id = math.ceil(math.log(num_clusters, len(characters)))
         # Select the first n=num_clusters identifiers with as many characters as computed.
         return ["".join(s) for s in itertools.product(characters, repeat=nr_characters_in_id)][:num_clusters]
 
     def add_cluster_id_column(servers_with_cluster_df):
+        # The number of unique clusters will be the number of unique ids.
         unique_clusters = servers_with_cluster_df.select("cluster").distinct().rdd.flatMap(lambda x: x).collect()
 
         # Create a map from clusters to id's and broadcast it to all nodes.
-        clusters_to_id = {cluster: identifier for cluster, identifier in zip(unique_clusters, 
-                                                                            get_cluster_identifiers(num_clusters=len(unique_clusters)))}
-        broadcast_cluster_to_id = servers_with_cluster_df.rdd.context.broadcast(clusters_to_id)
+        broadcast_cluster_to_id = servers_with_cluster_df.rdd.context.broadcast(
+            {cluster: identifier for cluster, identifier in zip(
+                unique_clusters, 
+                get_cluster_identifiers(num_clusters=len(unique_clusters)))}
+        )
 
+        # Create an udf for the broadcasted dict and apply it to the column
+        @udf(returnType=StringType())
         def get_identifier(cluster):
             return broadcast_cluster_to_id.value[cluster]   
-        get_identifier_udf = udf(get_identifier, StringType())
+        
+        return servers_with_cluster_df.withColumn("cluster_id", get_identifier(col("cluster")))
 
-        return servers_with_cluster_df.withColumn("cluster_id", get_identifier_udf(col("cluster")))
-    
     return add_cluster_id_column(servers_with_cluster_df=servers_with_cluster)
