@@ -1,7 +1,7 @@
 import numpy as np
 from pyspark.ml.feature import HashingTF, MinHashLSH
 from pyspark.sql import Row
-from pyspark.sql.functions import lit, udf, col, explode
+from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
 from setup_spark import session_spark
@@ -104,7 +104,7 @@ def servers_depth(request_path: str) -> dict:
         return {}
 
 
-def create_logs_with_depth_df(logs_df, process_df):
+def add_depth_to_df(logs_df, process_df):
     """
     Creates a logs DataFrame with an additional 'depth_from' column indicating the depth of of the server that performs the 
     Request or gives the Response.
@@ -123,15 +123,14 @@ def create_logs_with_depth_df(logs_df, process_df):
     servers_depth_udf = udf(servers_depth, MapType(StringType(), IntegerType()))
 
     # Apply the servers_depth function to the request_paths_df to create a new DataFrame with the server depths
-    request_paths_with_depth_df = process_df.withColumn("servers_depth", servers_depth_udf(col("request_path")))
+    processes_with_depth_df = process_df.withColumn("servers_depth", servers_depth_udf(col("request_path")))
 
     # Join the original logs_df with the request_paths_with_depth_df to get the servers_depth for each process_id
-    logs_with_depth_df = logs_df.join(request_paths_with_depth_df, on="process_id")
+    logs_with_depth_df = logs_df.join(processes_with_depth_df, on="process_id")
 
     # Define a UDF to extract the depth_from from the servers_depth dictionary
     def get_depth_from(servers_depth, state_from):
         return servers_depth.get(state_from, -1)  # Return -1 if the state_from is not found
-
     get_depth_from_udf = udf(get_depth_from, IntegerType())
 
     # Add the depth_from column to logs_with_depth_df
@@ -143,10 +142,35 @@ def create_logs_with_depth_df(logs_df, process_df):
     # Drop the servers_depth column as it is no longer needed
     logs_with_depth_df = logs_with_depth_df.drop("servers_depth", "request_path")
 
-    return logs_with_depth_df  
+    def add_servers_by_depth(processes_with_depth_df):
+        # Explode the servers_depth map into separate rows
+        exploded_df = processes_with_depth_df.select(
+            col("process_id"),
+            explode(col("servers_depth")).alias("server", "depth")
+        )
+
+        # Group by process_id and depth, then collect servers into a list
+        grouped_df = exploded_df.groupBy("process_id", "depth").agg(
+            collect_list("server").alias("servers")
+        )
+
+        # Create a map from depth to servers
+        depth_to_servers_df = grouped_df.groupBy("process_id").agg(
+            expr("map_from_entries(collect_list(struct(depth, servers)))").alias("depth_to_servers")
+        )
+
+        # Join back with the original DataFrame
+        return processes_with_depth_df.join(depth_to_servers_df, on="process_id", how="inner")
+
+    # Change Map(Server: Depth) to Map(Depth: List[Server])
+    processes_with_depth_df = add_servers_by_depth(processes_with_depth_df)
+    processes_with_depth_df = processes_with_depth_df.drop("servers_depth")
+
+    return logs_with_depth_df, processes_with_depth_df
+
 
 def get_string_server_connections(logs_with_depth_rdd):
-    """..
+    """
     Generates a list of all the server connections for each server in the logs RDD.
     Each connection of a specific server X is a tuple of the form (related_server, request_type, depth) representing:
         - related_server: server with a request involving X and itself.
@@ -225,11 +249,17 @@ def create_server_distance_array(distances_df, server_names):
     return distance_array
 
 def get_server_clusters(distances_rdd, server_names):
+    def ordered_join(s1, s2):
+        # Split the strings into lists
+        servers = s1.split('+') + s2.split('+')
+        # Sort by server_names indices and join back into a single string
+        return '+'.join(sorted(servers, key=lambda x: server_names.index(x)))
+    
     all_related_servers = distances_rdd.map(lambda x: x["server_name_A"]).distinct().collect()
     alone_servers = list(set(server_names) - set(all_related_servers)) 
     server_clusters = distances_rdd.filter(lambda x: x["JaccardDistance"] < 1e-3) \
                             .map(lambda x: (x['server_name_A'], x['server_name_B'])) \
-                            .reduceByKey(lambda s1, s2: '+'.join([s1,s2])).collect()
+                            .reduceByKey(ordered_join).collect()
     if len(alone_servers)>0:
         return server_clusters.join(sc.parallelize(alone_servers).map(lambda x: (x,x)))
     return server_clusters
@@ -248,7 +278,68 @@ def add_cluster_column(servers_df, distances_rdd):
     get_cluster_udf = udf(get_cluster, StringType())
     
     return servers_df.withColumn("cluster", get_cluster_udf(servers_df["server_name"]))
+
+import string
+from itertools import product
+
+def get_cluster_identifiers(num_clusters):
+    """ Generate as many unique identifiers using A-Z characters as number of clusters  """
+    characters = string.ascii_uppercase
+    # Compute how many characters will the identifiers have
+    nr_characters_in_id = 1
+    while num_clusters > len(characters)**nr_characters_in_id:
+        nr_characters_in_id += 1
+    # Select the first n=num_clusters identifiers with as many characters as computed.
+    return ["".join(s) for s in product(characters, repeat=nr_characters_in_id)][:num_clusters]
+
+def add_cluster_id_column(servers_with_cluster_df):
+    unique_clusters = servers_with_cluster_df.select("cluster").distinct().rdd.flatMap(lambda x: x).collect()
+
+    # Create a map from clusters to id's and broadcast it to all nodes.
+    clusters_to_id = {cluster: identifier for cluster, identifier in zip(unique_clusters, 
+                                                                         get_cluster_identifiers(num_clusters=len(unique_clusters)))}
+    broadcast_cluster_to_id = sc.broadcast(clusters_to_id)
+
+    def get_identifier(cluster):
+        return broadcast_cluster_to_id.value[cluster]   
+    get_identifier_udf = udf(get_identifier, StringType())
+
+    return servers_with_cluster_df.withColumn("cluster_id", get_identifier_udf(col("cluster")))
+
+
+def add_cluster_request_path_and_cluster_to_depth(processes_df, servers_with_cluster_df):
+    # Convert the servers_mapping_df to a dictionary and broadcast it
+    server_to_cluster_dict = dict(servers_with_cluster_df.rdd.map(lambda x: (x['server_name'], x['cluster_id'])).distinct().collect())
+    broadcast_server_to_cluster_dict = sc.broadcast(server_to_cluster_dict)
+
+    # Step 1: Replace servers in depth_to_servers
+    @udf(returnType=ArrayType(StringType()))
+    def replace_servers_with_clusts_list(server_list):
+        mapping = broadcast_server_to_cluster_dict.value
+        print(server_list)
+        return [mapping.get(server[0], server[0]) for server in server_list]
     
+    # Add depth_to_clusters_column
+    processes_df = processes_df.withColumn(
+        "depth_to_clusters", 
+        map_from_arrays(map_keys(col("depth_to_servers")), 
+                        replace_servers_with_clusts_list(map_values(col("depth_to_servers"))))
+    )
+
+    # Step 2: Replace servers by clusters in request_path
+    @udf(returnType=ArrayType(StringType()))
+    def replace_servers_with_clusters(segments):
+        mapping = broadcast_server_to_cluster_dict.value
+        return [":".join([mapping.get(server, server) for server in segment.split(":")]) for segment in segments]
+
+    # Split request_path into individual edges, apply udf function an reconstruct the request path
+    processes_df = processes_df.withColumn(
+        "cluster_request_path", 
+        concat_ws("-", replace_servers_with_clusters(split(col("request_path"), "-")))
+    )
+
+    return processes_df
+
 
 if __name__ == "__main__":
 
@@ -261,7 +352,7 @@ if __name__ == "__main__":
                                          .map(lambda x: Row(process_id=x[0], request_path=x[1])))
 
     # Add depth_from in every log, indicating the depth of the server performing the Request or giving the Response.
-    logs_with_depth_df = create_logs_with_depth_df(logs_df, processes_df)
+    logs_with_depth_df, processes_with_depth_df = add_depth_to_df(logs_df, processes_df)
 
     # Create servers df with an extra column connections that contains an array of strings.
     # String represent the connection tuples (Related_server, Request_type, Depth) but concatenating all elements as strings.
@@ -282,7 +373,7 @@ if __name__ == "__main__":
     features_server_df = hashingTF.transform(servers_df)
 
     # Add a column to servers df indicating the hashes of the columns of the signature/representation matrix.
-    mh = MinHashLSH(inputCol="features", outputCol="hashes", numHashTables=10)
+    mh = MinHashLSH(inputCol="features", outputCol="hashes", numHashTables=5)
     #TODO: Decide the number of hash tables
     model = mh.fit(features_server_df)
     transformedData = model.transform(features_server_df)  
@@ -300,8 +391,13 @@ if __name__ == "__main__":
 
     servers_with_cluster_df = add_cluster_column(servers_df=servers_df, 
                                                  distances_rdd=approx_Jaccard_distances.rdd)
-    servers_with_cluster_df.show()
+    servers_with_cluster_df = add_cluster_id_column(servers_with_cluster_df)
 
     """ server_distance_array = create_server_distance_array(distances_df=approx_Jaccard_distances,
                                                          server_names=server_names) """
         
+    processes_with_depth_df = add_cluster_request_path_and_cluster_to_depth(
+        processes_df=processes_with_depth_df,
+        servers_with_cluster_df=servers_with_cluster_df
+        )
+    processes_with_depth_df.show()
