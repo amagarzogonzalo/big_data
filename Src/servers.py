@@ -143,3 +143,6 @@ def add_cluster_column(servers_df, distances_rdd):
         return servers_with_cluster_df.withColumn("cluster_id", get_identifier(col("cluster")))
 
     return add_cluster_id_column(servers_with_cluster_df=servers_with_cluster)
+
+
+

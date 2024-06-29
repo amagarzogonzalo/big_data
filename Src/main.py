@@ -15,6 +15,7 @@ if __name__ == "__main__":
 
     # Read log file and create original log d
     DATASET_NAME = "data_processes_v2.json"
+    DATASET_NAME = "simple.json"
     logs_df = spark.read.json("../Data/"+DATASET_NAME)
 
     # Create the processes df with their associated request paths
@@ -23,6 +24,9 @@ if __name__ == "__main__":
 
     # Add depth_from in every log, indicating the depth of the server performing the Request or giving the Response.
     logs_with_depth_df, processes_with_depth_df = add_depth_to_df(logs_df, processes_df)
+
+    logs_with_depth_df.show()
+    processes_with_depth_df.show()
 
     # Create servers df with an extra column connections that contains an array of strings.
     # String represent the connection tuples (Related_server, Request_type, Depth) but concatenating all elements as strings.
@@ -62,6 +66,7 @@ if __name__ == "__main__":
 
     servers_with_cluster_df = add_cluster_column(servers_df=servers_df, 
                                                  distances_rdd=approx_Jaccard_distances.rdd)
+    #servers_df.show()
 
     """ server_distance_array = create_server_distance_array(distances_df=approx_Jaccard_distances,
                                                          server_names=server_names) """
@@ -74,7 +79,7 @@ if __name__ == "__main__":
     processes_with_elements_df = add_processes_elements(processes_df=processes_with_depth_df,
                                                      logs_df=logs_df,
                                                      servers_with_cluster_df=servers_with_cluster_df)
-    #processes_with_elements_df.show()
+    processes_with_elements_df.show()
 
     process_hashingTF = HashingTF(inputCol="elements", outputCol="features", numFeatures=512)
     features_process_df = process_hashingTF.transform(processes_with_elements_df)
@@ -94,6 +99,7 @@ if __name__ == "__main__":
                                 col("JaccardDistance")
                             ) """
     
+
     process_clusters = process_dbscan(spark=spark, 
                                       df=features_process_df.drop("depth_to_servers", "depth_to_clusters"),
                                       approx_dist_model=process_model,
@@ -101,3 +107,5 @@ if __name__ == "__main__":
                                       min_pts= 5
                                       )
     process_clusters.show()
+    process_clusters.groupBy("component").count().show()
+

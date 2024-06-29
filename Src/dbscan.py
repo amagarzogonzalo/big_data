@@ -5,7 +5,6 @@ import math
 from graphframes import *
 from pyspark.sql import Row, functions as F
 
-
 def __distance_from_pivot(pivot, dist, epsilon, operations):
     def distance(x):
         pivot_dist = dist(x.id, pivot)
@@ -47,7 +46,6 @@ def __scan(epsilon, dist, operations):
 
     return scan
 
-
 def __label(min_pts):
     def label(x):
         if len(x[1]) + 1 >= min_pts:
@@ -62,7 +60,6 @@ def __label(min_pts):
         return []
 
     return label
-
 
 def __combine_labels(x):
     # 0th element is the id of point
@@ -136,7 +133,7 @@ def process_dbscan(spark, df, approx_dist_model, epsilon, min_pts,
     distances = approx_dist_model.approxSimilarityJoin(
                         datasetA=df,
                         datasetB=df,
-                        threshold=epsilon, distCol="JaccardDistance"
+                        threshold=epsilon, distCol="distance"
                         ).select(
                             F.col("datasetA."+id_column_name).alias("id_A"),
                             F.col("datasetB."+id_column_name).alias("id_B"),
