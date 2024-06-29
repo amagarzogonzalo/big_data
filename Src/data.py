@@ -12,6 +12,8 @@ class Timer:
 def get_next_states(prev_state, num_max_child, list_states, tasks_servers, control=10):
     num_possible_next_states = min(len(prev_state.next_state), num_max_child) # set max child per server call
     num_next_states = random.randint(1, num_possible_next_states)
+    if prev_state.__name__ == "user":
+        num_next_states = 1
     if num_next_states == 0:
         return None, None, False
     states, servers = [], []
@@ -154,7 +156,7 @@ def init_data(namefile = "data1.json",distinct_process = 1, num_process=2, num_m
 def create_data():
     names = ["complexity.json", "variety.json", "homogeneity.json", "simple.json"]
     distinct_process = [100, 100, 100, 2]
-    num_process = [1000, 1000, 1000, 10]
+    num_process = [1000, 1000, 1000, 4]
     num_max_child = [2, 2, 2, 2]
     max_depth = [3, 3, 3, 2]
     n_tasks=  [100, 100, 100, 10] 
