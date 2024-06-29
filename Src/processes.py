@@ -122,7 +122,6 @@ def add_depth_to_df(logs_df, processes_df):
 
     # Change Map(Server: Depth) to Map(Depth: List[Server])
     processes_with_depth_df = add_depth_to_servers_map(processes_with_depth_df)
-    processes_with_depth_df = processes_with_depth_df.drop("servers_depth")
 
     # STEP 2: Operations on Logs
 
@@ -141,6 +140,7 @@ def add_depth_to_df(logs_df, processes_df):
 
     # Drop the servers_depth column as it is no longer needed
     logs_with_depth_df = logs_with_depth_df.drop("servers_depth", "request_path")
+    processes_with_depth_df = processes_with_depth_df.drop("servers_depth")
 
     return logs_with_depth_df, processes_with_depth_df
 

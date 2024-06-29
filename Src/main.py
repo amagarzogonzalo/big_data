@@ -6,6 +6,7 @@ from pyspark.sql.types import *
 
 from processes import *
 from servers import *
+from dbscan import process_dbscan
 from setup_spark import session_spark
 
 if __name__ == "__main__":
@@ -73,7 +74,7 @@ if __name__ == "__main__":
     processes_with_elements_df = add_processes_elements(processes_df=processes_with_depth_df,
                                                      logs_df=logs_df,
                                                      servers_with_cluster_df=servers_with_cluster_df)
-    processes_with_elements_df.show()
+    #processes_with_elements_df.show()
 
     process_hashingTF = HashingTF(inputCol="elements", outputCol="features", numFeatures=512)
     features_process_df = process_hashingTF.transform(processes_with_elements_df)
@@ -83,14 +84,20 @@ if __name__ == "__main__":
     process_model = process_mh.fit(features_process_df)
     transformedData = process_model.transform(features_process_df)  
 
-    approx_process_distances = process_model.approxSimilarityJoin(
+    """ approx_process_distances = process_model.approxSimilarityJoin(
                             datasetA=features_process_df.drop("depth_to_servers", "depth_to_clusters"),
                             datasetB=features_process_df.drop("depth_to_servers", "depth_to_clusters"),
                             threshold=0.3, distCol="JaccardDistance"
                             ).select(
-                                col("datasetA.process_id").alias("process_id_A"),
-                                col("datasetB.process_id").alias("process_id_B"),
+                                col("datasetA.process_id").alias("id_A"),
+                                col("datasetB.process_id").alias("id_B"),
                                 col("JaccardDistance")
-                            )
-
-    approx_process_distances.show()
+                            ) """
+    
+    process_clusters = process_dbscan(spark=spark, 
+                                      df=features_process_df.drop("depth_to_servers", "depth_to_clusters"),
+                                      approx_dist_model=process_model,
+                                      epsilon=0.4,
+                                      min_pts= 5
+                                      )
+    process_clusters.show()
