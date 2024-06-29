@@ -137,8 +137,8 @@ def init_data(namefile = "data1.json",distinct_process = 1, num_process=2, num_m
                 serverto = "S"+str(dictt[state_to])
 
             subtask_dict = {
-                'state_from ': serverfrom,
-                'state_to ': serverto,
+                'state_from': serverfrom,
+                'state_to': serverto,
                 'action': action,'time': time,'process_id': process_id
             }
             serializable_subtasks.append(subtask_dict)
@@ -148,19 +148,24 @@ def init_data(namefile = "data1.json",distinct_process = 1, num_process=2, num_m
     
     #os.remove(path)
 
-    with open(path, 'w') as f:
-        json.dump(serializable_subtasks, f, indent=4)
+   
+    with open(path, 'w') as f:  
+        for i, d in enumerate(serializable_subtasks):
+            f.write(json.dumps(d))
+            if i < len(serializable_subtasks) - 1:
+                f.write(',\n')
+
     print(f"File {namefile} created.")
 
 
 def create_data():
     names = ["complexity.json", "variety.json", "homogeneity.json", "simple.json"]
     distinct_process = [100, 100, 100, 2]
-    num_process = [1000, 1000, 1000, 4]
+    num_process = [1000, 1000, 1000, 1]
     num_max_child = [2, 2, 2, 2]
     max_depth = [3, 3, 3, 2]
-    n_tasks=  [100, 100, 100, 10] 
-    n_servers= [1000, 1000, 1000, 1000]
+    n_tasks=  [100, 100, 100, 20] 
+    n_servers= [1000, 1000, 1000, 200]
 
     for name, distinct, nump, numchild, depth, ntask, nserver in zip(names, distinct_process, num_process, num_max_child, max_depth, n_tasks, n_servers):
         init_data(namefile=name, distinct_process=distinct, num_process=nump,
