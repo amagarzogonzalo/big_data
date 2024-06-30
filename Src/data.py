@@ -163,7 +163,7 @@ def create_data():
     distinct_process = [100, 100, 100, 40, 8]
     num_process = [1000, 1000, 1000, 100, 100]
     num_max_child = [2, 2, 2, 3, 3]
-    max_depth = [3, 3, 3, 5, 4]
+    max_depth = [3, 3, 3, 5, 2]
     n_tasks=  [100, 100, 100, 12, 15] 
     n_servers= [1000, 1000, 1000, 25, 25]
 

@@ -227,12 +227,12 @@ def equal_processes(spark, processes_with_elements_df, cluster_logs_df, dataset_
     equal_processes = processes_with_elements_df.groupBy("cluster_euler_string"
                                                          ).agg(collect_list("process_id").alias("equal_processes")) \
                                                 .withColumn("group_processes_id", monotonically_increasing_id())\
-                                                .withColumn("process", explode("equal_processes"))
-
+                                                
+    exploded_processes = equal_processes.withColumn("process", explode("equal_processes"))
 
     logs_with_grouped_processes = cluster_logs_df.join(
-        equal_processes,
-        cluster_logs_df.process_id == equal_processes.process,
+        exploded_processes,
+        cluster_logs_df.process_id == exploded_processes.process,
         how="left"
     ).select(
         col("cluster_from").alias("state_from"),
@@ -254,8 +254,17 @@ def equal_processes(spark, processes_with_elements_df, cluster_logs_df, dataset_
     logs_with_grouped_processes.show()
 
     logs_with_grouped_processes.write.json(path="../Data/" + dataset_name+ "_part1Output.txt",
-                                           mode="overwrite")
-    
+                                           mode="overwrite",
+                                           lineSep=',')
+
+    @udf(returnType=StringType())
+    def format_text(equal_processes):
+        text = f'Group: {equal_processes}\n'
+        for process in equal_processes:
+            text += f'{process}:\n'
+            text += f'      List of all logs of {process}\n'
+        return text
+        
     
 
 

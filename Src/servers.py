@@ -53,7 +53,7 @@ def create_servers_df(spark, logs_with_depth_df):
         """
         server_connections = []
         # Create one entry in the array for each server except the user (incoming requests from user are captured anyways)
-        for server_name in get_server_names(logs_rdd=logs_with_depth_rdd): 
+        for server_name in get_server_names(logs_rdd=logs_with_depth_rdd, without_user=False): 
 
             # Find incoming requests connections to the server and map them into string representations
             incoming_connections = set(logs_with_depth_rdd.filter(lambda x: x['action']=="Request" and x['state_to'] == server_name) \
@@ -169,6 +169,8 @@ def cluster_servers(spark, servers_df):
         # Create an udf for the broadcasted dict and apply it to the column
         @udf(returnType=StringType())
         def get_identifier(cluster):
+            if cluster == "user":
+                return "user"
             return broadcast_cluster_to_id.value[cluster]   
         
         return servers_with_cluster_df.withColumn("cluster_id", get_identifier(col("cluster")))
