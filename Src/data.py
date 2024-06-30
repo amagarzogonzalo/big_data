@@ -9,11 +9,14 @@ class Timer:
     def __init__ (self, time):
         self.curr_time = time
 
-def get_next_states(prev_state, num_max_child, list_states, tasks_servers, control=10):
+def get_next_states(prev_state, num_max_child, list_states, tasks_servers, curr_depth, max_depth, control=10):
     num_possible_next_states = min(len(prev_state.next_state), num_max_child) # set max child per server call
-    num_next_states = random.randint(1, num_possible_next_states)
     if prev_state.__name__ == "user":
         num_next_states = 1
+    else:
+        minim = 1 if len(list_states) <= 3 or curr_depth <= 2 else 0
+        num_next_states = random.randint(minim, num_possible_next_states)
+    
     if num_next_states == 0:
         return None, None, False
     states, servers = [], []
@@ -36,7 +39,7 @@ def get_next_states(prev_state, num_max_child, list_states, tasks_servers, contr
     return states, servers, True
 
 def iterate_state(prev_state, subtasks, Timer, process_id, num_max_child, curr_depth, max_depth, list_states, tasks_servers, prev_server):
-    states, servers, check = get_next_states(prev_state, num_max_child, list_states, tasks_servers)
+    states, servers, check = get_next_states(prev_state, num_max_child, list_states, tasks_servers, curr_depth, max_depth)
     
     if check is True:
         
@@ -159,13 +162,13 @@ def init_data(namefile = "data1.json",distinct_process = 1, num_process=2, num_m
 
 
 def create_data():
-    names = ["complexity.json", "variety.json", "homogeneity.json", "simple.json", "test.json"]
-    distinct_process = [100, 100, 100, 40, 8]
-    num_process = [1000, 1000, 1000, 100, 100]
-    num_max_child = [2, 2, 2, 3, 3]
-    max_depth = [3, 3, 3, 5, 4]
-    n_tasks=  [100, 100, 100, 12, 15] 
-    n_servers= [1000, 1000, 1000, 25, 25]
+    names = ["complexity.json", "variety.json", "homogeneity.json", "simple.json"]
+    distinct_process = [100, 100, 100, 8]
+    num_process = [1000, 1000, 1000, 10]
+    num_max_child = [2, 2, 2, 2]
+    max_depth = [3, 3, 3, 3]
+    n_tasks=  [100, 100, 100, 20] 
+    n_servers= [1000, 1000, 1000, 200]
 
     for name, distinct, nump, numchild, depth, ntask, nserver in zip(names, distinct_process, num_process, num_max_child, max_depth, n_tasks, n_servers):
         init_data(namefile=name, distinct_process=distinct, num_process=nump,
