@@ -4,7 +4,7 @@ from pyspark.ml.feature import HashingTF, MinHashLSH
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
-from dbscan import process_dbscan
+from dbscan import minhash_dbscan, process_edit_distance_dbscan
 from servers import get_cluster_logs_df
 
 def create_processes_df(spark, logs_df):
@@ -145,7 +145,7 @@ def add_depth_features(logs_df, processes_df):
 
     # Drop the servers_depth column as it is no longer needed
     logs_with_depth_df = logs_with_depth_df.drop("servers_depth", "request_path")
-    processes_with_depth_df = processes_with_depth_df.drop("servers_depth")
+    processes_with_depth_df = processes_with_depth_df.drop("servers_depth" )
 
     return logs_with_depth_df, processes_with_depth_df
 
@@ -189,7 +189,7 @@ def add_cluster_features(processes_df, servers_with_cluster_df):
         "cluster_euler_string", 
         concat_ws("-", replace_euler_sting(split(col("euler_string"), "-")))
     )
-    return processes_df
+    return processes_df.drop("request_path", "euler_string", "depth_to_servers")
 
 
 def add_processes_elements(spark, processes_df, cluster_logs_df):
@@ -212,7 +212,7 @@ def add_processes_elements(spark, processes_df, cluster_logs_df):
             for cluster in clusters:
                 key = process_id + '_' + cluster
                 if key in mapping:
-                    result.append(str(depth) + '_' + cluster + ":" + ','.join(mapping.get(key,key)))
+                    result.append(cluster + ":" + ','.join(mapping.get(key,key)))
         return result
 
     processes_df = processes_df.withColumn(
@@ -224,24 +224,26 @@ def add_processes_elements(spark, processes_df, cluster_logs_df):
 
 def equal_processes(spark, processes_with_elements_df, cluster_logs_df, dataset_name):
 
-    equal_processes = processes_with_elements_df.groupBy("cluster_euler_string"
+    equal_processes= processes_with_elements_df.groupBy("cluster_euler_string"
                                                          ).agg(collect_list("process_id").alias("equal_processes")) \
-                                                .withColumn("group_processes_id", monotonically_increasing_id())\
+                                                .withColumn("group_processes_id", monotonically_increasing_id())
                                                 
     exploded_processes = equal_processes.withColumn("process", explode("equal_processes"))
-
-    logs_with_grouped_processes = cluster_logs_df.join(
+    logs_with_group_process_id = cluster_logs_df.join(
         exploded_processes,
         cluster_logs_df.process_id == exploded_processes.process,
         how="left"
-    ).select(
+    )
+
+    logs_with_grouped_processes = logs_with_group_process_id.select(
         col("cluster_from").alias("state_from"),
         col("cluster_to").alias("state_to"),
         col("time").cast(IntegerType()).alias("time"),
         col("action"),
         col("group_processes_id").alias("process_id")
     ).orderBy("time"
-    ).groupBy("process_id", "state_from", "state_to", "action"
+    ).groupBy(
+        "process_id", "state_from", "state_to", "action"
     ).agg(first(col("time")).alias("time")
     ).select(
         col("state_from"),
@@ -250,50 +252,103 @@ def equal_processes(spark, processes_with_elements_df, cluster_logs_df, dataset_
         col("action"),
         col("process_id").alias("process_id")
     ).orderBy("time")
-
-    logs_with_grouped_processes.show()
-
     logs_with_grouped_processes.write.json(path="../Data/" + dataset_name+ "_part1Output.txt",
                                            mode="overwrite",
-                                           lineSep=',')
+                                           lineSep='\n')
 
     @udf(returnType=StringType())
-    def format_text(equal_processes):
-        text = f'Group: {equal_processes}\n'
-        for process in equal_processes:
-            text += f'{process}:\n'
-            text += f'      List of all logs of {process}\n'
-        return text
+    def row_text(server_from, server_to, time, action, process_id):
+        dic = {"server_from": server_from,
+                "server_to": server_to, 
+                "time": time, 
+                "action": action, 
+                "process_id": process_id}
+        return f'      {str(dic)},\n'
+
+    @udf(returnType=StringType())
+    def process_id_str(process_id):
+        return f'{process_id}: \n'
+
+    @udf(returnType=StringType())
+    def observations_group(group_name, group_members, group_text):
+        return f'Group {group_name}: {group_members} \n {group_text}'
         
-    
+    observations = logs_with_group_process_id.withColumn(
+        "row_text",
+        row_text(
+                col("cluster_from"), 
+                col("cluster_to"),
+                col("time"),
+                col("action"),
+                col("process_id")
+                )
+        ).orderBy( "time"
+        ).groupBy( "process_id"
+        ).agg(
+            any_value("group_processes_id").alias("group_processes_id"),
+            any_value("equal_processes").alias("equal_processes"),
+            concat(process_id_str("process_id"), 
+                   concat_ws("", collect_list("row_text"))).alias("process_text")
+        ).groupBy( "group_processes_id", "equal_processes"
+        ).agg(
+            observations_group(
+                col("group_processes_id"),
+                col("equal_processes"),
+                concat_ws("", collect_list("process_text"))
+            ).alias("text")
+        )
+    observations.select("text").write.mode("overwrite").text(path="../Data/" + dataset_name+ "_part1Observations.txt")
 
+    equal_processes= equal_processes.drop("cluster_euler_string"
+        ).join(
+            processes_with_elements_df,
+            equal_processes.equal_processes[0] == processes_with_elements_df.process_id,
+            how="left"
+        ).select("group_processes_id", "cluster_elements", "cluster_euler_string")
 
-    """ path = "..Data/" + dataset_name
-    with open(path + "_part1Output", "w") as f: """
-
-
-
-    """ process_hashingTF = HashingTF(inputCol="cluster_elements", outputCol="features", numFeatures=512)
-    features_process_df = process_hashingTF.transform(processes_with_elements_df)
-
-    # Add a column to servers df indicating the hashes of the columns of the signature/representation matrix.
+    process_hashingTF = HashingTF(inputCol="cluster_elements", outputCol="features", numFeatures=512)
+    features_process_df = process_hashingTF.transform(equal_processes)
     process_mh = MinHashLSH(inputCol="features", outputCol="hashes", numHashTables=5)
     process_model = process_mh.fit(features_process_df)
+
+    processes_with_elements_df.show()
+
     #transformedData = process_model.transform(features_process_df)  
-    process_clusters = process_dbscan(spark=spark, 
-                                      df=features_process_df.drop("depth_to_servers", "depth_to_clusters"),
-                                      approx_dist_model=process_model,
-                                      epsilon=0.02,
-                                      min_pts= 2
-                                      ).select(col("process_id").alias("process_id"), col("component"))
-    process_clusters.show()
+    process_minhash_clusters = minhash_dbscan(
+        spark=spark,
+        df=features_process_df,
+        approx_dist_model=process_model,
+        epsilon=0.5,
+        min_pts= 2
+        ).select(
+            col("point").alias("group_processes_id"), 
+            col("component").alias("minhash_cluster"))
 
-    process_clusters = process_clusters.join(processes_with_elements_df, 
-                                             process_clusters.process_id == processes_with_elements_df.process_id, 
-                                             how="left").select(
-        col("process_id"), col("component"), col("cluster_euler_string")
-    )
+    # Add cluster_euler_distance   
+    process_minhash_clusters = process_minhash_clusters.join(
+        equal_processes, 
+        on="group_processes_id",
+        how="left"
+        ).select(
+            process_minhash_clusters["group_processes_id"], 
+            process_minhash_clusters["minhash_cluster"], 
+            equal_processes["cluster_euler_string"])
 
-    components = process_clusters.groupBy("component", "cluster_euler_string").agg(collect_list("point").alias("processes_in_component"))
-    components.show() """
+    minhash_clusters = process_minhash_clusters.select("minhash_cluster").rdd.distinct().collect()
+    print(minhash_clusters)
+
+    for mh_cluster in minhash_clusters:
+        process_edit_distance_clusters = process_edit_distance_dbscan(
+            spark=spark,
+            df=process_minhash_clusters.filter(
+                process_minhash_clusters.minhash_cluster == mh_cluster.__getitem__("minhash_cluster")
+                ),
+            epsilon=10,
+            min_pts = 2
+        ).select(
+                col("point").alias("group_processes_id"), 
+                col("component").alias("ped_cluster"))
+        process_edit_distance_clusters.show()
+
+
   

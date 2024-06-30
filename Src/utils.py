@@ -29,7 +29,7 @@ def check_distance_simetry(distances):
     # Check that there are now columns with different distances
     return joined_df.filter(col("JaccardDistance") != col("swapped_JaccardDistance")).rdd.isEmpty()
 
-def process_string_edit_distance(s, t, H):
+""" def process_string_edit_distance(s, t, H):
     assert type(s)==str and type(t)==str
 
     # If the pair is already in the associative array, returns its distance.
@@ -63,53 +63,50 @@ def process_string_edit_distance(s, t, H):
     else:
         k_d = k_a + 1
 
-        """ s_0 = splitted_s[-1].split(":")[0]
-        t_0 = splitted_t[-1].split(":")[0]
-        if not s_0 == t_0:
-            distance_0 = broadcasted_distances.value.get((s_0, t_0), 1)
-            k_d += 1
-        t_1 = splitted_s[-1].split(":")[1]
-        t_1 = splitted_t[-1].split(":")[1]    
-        if not t_1 == t_1:
-            distance_1 = broadcasted_distances.value.get((t_1, t_1), 1)
-            k_d += 1 """
-    
     # Choose the minimum of the three costs
     c = min([k_d, k_b, k_c])
 
-    # If the operation selected is a substitution, append 
-    """ if c == k_d and not splitted_s[-1] == splitted_t[-1]:
-        if k_d - k_a < 2:
-            if not s_0 == t_0:
-                S.append(((s_0, t_0), distance_0))
-            if not t_1 == t_1:
-                S.append(((t_1, t_1), distance_1)) """
-
     #c = c - len(S) + sum([substitution[1] for substitution in S])
     H[(s, t)] = c
-    return c
+    return c """
 
-if __name__ == "__main__":
-    from setup_spark import session_spark
-    import random
+import numpy as np
+def process_string_edit_distance(s, t):
+    assert type(s)==str and type(t)==str
+    
+    # We work with edges as base elements
+    splitted_s = s.split("-")
+    splitted_t = t.split("-")
 
-    spark = session_spark()
-    sc = spark.sparkContext
+    # Trivial cases
+    if len(s)==0:
+        if len(splitted_t) == 1 and not splitted_t[0]:
+            return 0
+        return len(splitted_t)
+    if len(t)==0:
+        if len(splitted_s) == 1 and not splitted_s[0]:
+            return 0
+        return len(splitted_s)
+    
 
-    # Create a dictionary with keys (server_1, server_2) and random values in [0, 1]
-    servers = [chr(i) for i in range(ord('A'), ord('Z') + 1)]
-    distances = {(s1, s2): random.uniform(0, 1) for s1 in servers for s2 in servers}
+    D = np.zeros(shape=(len(splitted_s)+1, len(splitted_t)+1))
+    for i in range(0, len(splitted_s)+1):
+        D[i,0] = i
+    for j in range(0, len(splitted_t)+1):
+        D[0,j] = j
 
-    # Broadcast the dictionary
-    broadcasted_distances = sc.broadcast(distances)
+    for i in range(1, len(splitted_s)):
+        for j in range(1, len(splitted_t)):
+            if splitted_s[j] == splitted_t[j]:
+                sub_cost = 0
+            else:
+                sub_cost = 1
+            
+            D[i][j] = min(
+                D[i - 1][j] + 1,   # Deletion
+                D[i][j - 1] + 1,   # Insertion
+                D[i-1][j - 1] + sub_cost  # Substitution
+            )
+    return D[len(splitted_s), len(splitted_t)]
 
-    process_1 = "1A-1C-0C-1B-1E-1F-0F-0E-0B-0A"
-    process_2 = "1A-1B-1E-1F-0F-0E-1T-0T-0B-1C-1L-0L-0C-0A"
 
-    memoization_dict = {}
-    substitution_list = []
-
-    d = process_string_edit_distance(process_1, process_2, 
-                                    H=memoization_dict)
-
-    print(d)

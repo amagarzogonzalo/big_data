@@ -162,13 +162,13 @@ def init_data(namefile = "data1.json",distinct_process = 1, num_process=2, num_m
 
 
 def create_data():
-    names = ["complexity.json", "variety.json", "homogeneity.json", "simple.json"]
-    distinct_process = [100, 100, 100, 8]
-    num_process = [1000, 1000, 1000, 10]
-    num_max_child = [2, 2, 2, 2]
-    max_depth = [3, 3, 3, 3]
-    n_tasks=  [100, 100, 100, 20] 
-    n_servers= [1000, 1000, 1000, 200]
+    names = ["complexity.json", "variety.json", "homogeneity.json", "simple.json", "test.json"]
+    distinct_process = [100, 100, 100, 8, 2]
+    num_process = [1000, 1000, 1000, 10, 6]
+    num_max_child = [2, 2, 2, 2, 2]
+    max_depth = [3, 3, 3, 3, 3]
+    n_tasks=  [100, 100, 100, 20, 2] 
+    n_servers= [1000, 1000, 1000, 200, 3]
 
     for name, distinct, nump, numchild, depth, ntask, nserver in zip(names, distinct_process, num_process, num_max_child, max_depth, n_tasks, n_servers):
         init_data(namefile=name, distinct_process=distinct, num_process=nump,

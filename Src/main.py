@@ -7,7 +7,7 @@ from pyspark.sql.types import *
 
 from processes import *
 from servers import *
-from dbscan import process_dbscan
+from dbscan import minhash_dbscan
 from setup_spark import session_spark
 
 if __name__ == "__main__":
@@ -29,10 +29,8 @@ if __name__ == "__main__":
     # String represent the connection tuples (Related_server, Request_type, Depth) but concatenating all elements as strings.
     #server_names = get_server_names(logs_rdd=logs_df.rdd)
     servers_df = create_servers_df (spark, logs_with_depth_df)
-    servers_df.filter(col("server_name") == "user").show()
 
     servers_with_cluster_df, cluster_distances_df = cluster_servers(spark, servers_df)
-    servers_with_cluster_df.show()
 
     processes_with_depth_df = add_cluster_features(
         processes_df=processes_with_depth_df,

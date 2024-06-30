@@ -5,23 +5,26 @@ import math
 from graphframes import *
 from pyspark.sql import Row, functions as F
 
+
+H = {}
+
 def __distance_from_pivot(pivot, dist, epsilon, operations):
     def distance(x):
-        pivot_dist = dist(x.id, pivot)
-        """ if operations is not None:
-            operations.add() """
+        pivot_dist = dist(x.value, pivot)
+        if operations is not None:
+            operations.add()
         partition_index = math.floor(pivot_dist / epsilon)
-        rows = [Row(id=x.id, value=x.value, pivot_dist=dist(x.id, pivot))]
+        rows = [Row(id=x.id, value=x.value, pivot_dist=dist(x.value, pivot))]
         out = [(partition_index, rows),
                (partition_index + 1, rows)]
         return out
     return distance
 
+
 def __scan(epsilon, dist, operations):
     def scan(x):
         # out dictionary would have point id as key and a set of point ids who are within epsilon distance to
         # key point id. value is basically its neighbors
-
         out = {}
         # 0th index of x is partition_index
         # 1st index of x is data points
@@ -29,9 +32,9 @@ def __scan(epsilon, dist, operations):
         partition_len = len(partition_data)
         for i in range(partition_len):
             for j in range(i + 1, partition_len):
-                """ if operations is not None:
-                    operations.add() """
-                if dist(partition_data[i].id, partition_data[j].id) <= epsilon:
+                if operations is not None:
+                    operations.add()
+                if dist(partition_data[i].value, partition_data[j].value) < epsilon:
                     # both i and j are within epsilon distance to each other
                     if partition_data[i].id in out:
                         out[partition_data[i].id].add(partition_data[j].id)
@@ -45,6 +48,7 @@ def __scan(epsilon, dist, operations):
         return [Row(item[0], item[1]) for item in out.items()]
 
     return scan
+
 
 def __label(min_pts):
     def label(x):
@@ -61,6 +65,7 @@ def __label(min_pts):
 
     return label
 
+
 def __combine_labels(x):
     # 0th element is the id of point
     # 1st element is the list of tuples with cluster and core point label
@@ -75,6 +80,7 @@ def __combine_labels(x):
     # if core point keep all cluster otherwise only one
     return point, clusters if core_point is True else [clusters[0]], core_point
 
+
 def process(spark, df, epsilon, min_pts, dist, checkpoint_dir, operations=None):
     """
     Process given dataframe with DBSCAN parameters
@@ -88,7 +94,7 @@ def process(spark, df, epsilon, min_pts, dist, checkpoint_dir, operations=None):
     :param operations: class for managing accumulator to calculate number of distance operations
     :return: A dataframe of point id, cluster component and boolean indicator for core point
     """
-    zero = df.rdd.takeSample(False, 1)[0].id
+    zero = df.rdd.takeSample(False, 1)[0].value
     combine_cluster_rdd = df.rdd.\
         flatMap(__distance_from_pivot(zero, dist, epsilon, operations)). \
         reduceByKey(lambda x, y: x + y).\
@@ -127,8 +133,8 @@ def __get_dist(broadcast_distances):
         return broadcast_distances.value.get(key, 1)
     return dist
         
-def process_dbscan(spark, df, approx_dist_model, epsilon, min_pts, 
-                   id_column_name="process_id", value_column_name="cluster_euler_string"):
+def minhash_dbscan(spark, df, approx_dist_model, epsilon, min_pts, 
+                   id_column_name="group_processes_id", value_column_name="group_processes_id"):
 
     distances = approx_dist_model.approxSimilarityJoin(
                         datasetA=df,
@@ -142,13 +148,26 @@ def process_dbscan(spark, df, approx_dist_model, epsilon, min_pts,
     broadcast_distances = spark.sparkContext.broadcast(
         { (row.id_A, row.id_B): row.distance for row in distances.collect() }
     )
-    oldColumns = [id_column_name, value_column_name]
-    newColumns = ["id", "value"]
-    df = reduce(lambda data, idx: data.withColumnRenamed(
-        oldColumns[idx], newColumns[idx]), range(len(oldColumns)),
-        df
-    )
+    df = df.withColumnRenamed(id_column_name, "id")
+    if id_column_name == value_column_name:
+        df = df.withColumn("value", df.id)
+    else:
+        df = df.withColumnRenamed(value_column_name, "value")
+
     dist = __get_dist(broadcast_distances=broadcast_distances)
     return process(spark, df, epsilon, min_pts, dist, checkpoint_dir="checkpoint")
 
-__all__ = [process, process_dbscan]
+from utils import process_string_edit_distance
+def __get_process_edit_distance():
+    def dist(s, t):
+        return process_string_edit_distance(s, t)
+    return dist
+
+def process_edit_distance_dbscan(spark, df, epsilon, min_pts, 
+                                 id_column_name="group_processes_id", value_column_name="cluster_euler_string"):
+    df = df.withColumnRenamed(id_column_name, "id")
+    df = df.withColumnRenamed(value_column_name, "value")
+    dist = __get_process_edit_distance()
+    return process(spark, df, epsilon, min_pts, dist, checkpoint_dir="checkpoint")
+
+__all__ = [process, minhash_dbscan]
