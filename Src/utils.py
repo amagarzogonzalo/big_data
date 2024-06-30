@@ -97,7 +97,7 @@ def process_string_edit_distance(s, t):
 
     for i in range(1, len(splitted_s)):
         for j in range(1, len(splitted_t)):
-            if splitted_s[j] == splitted_t[j]:
+            if splitted_s[i] == splitted_t[j]:
                 sub_cost = 0
             else:
                 sub_cost = 1
