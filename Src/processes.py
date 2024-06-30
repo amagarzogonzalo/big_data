@@ -1,45 +1,50 @@
 import logging
+
+from pyspark.ml.feature import HashingTF, MinHashLSH
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
-def request_path(process):
-    """
-    Constructs the request path for a given process from the logs.
-    
-    Parameters:
-    process: list
-        A list of log entries for a specific process.
-        
-    Returns:
-    str
-        The constructed request path.
-    """
-    for log in process:
-        if log['action'] == 'Request':
-            if log['state_from'] == 'user':
-                # Start the path with the user request
-                path = ":".join([log['state_from'], log['state_to']])
-            else:
-                # Append to the path using '-' as a delimiter
-                path = "-".join([path, ":".join([log['state_from'], log['state_to']])])
-    return path
+from dbscan import process_dbscan
+from servers import get_cluster_logs_df
 
-def get_processes_request_paths(logs_rdd):
-    """
-    Generates request paths for all processes in the logs RDD.
-    
-    Parameters:
-    logs_rdd: RDD
-        An RDD containing log entries.
-        
-    Returns:
-    RDD
-        An RDD of tuples where the first element is the process_id and the second element is the request path.
-    """
-    return logs_rdd.sortBy(lambda x: x['time']).groupBy(lambda x: x['process_id'])\
-            .mapValues(request_path)
+def create_processes_df(spark, logs_df):
 
-def add_depth_to_df(logs_df, processes_df):
+    def request_path(process):
+        for log in process:
+            if log['action'] == 'Request':
+                if log['state_from'] == 'user':
+                    # Start the path with the user request
+                    path = ":".join([log['state_from'], log['state_to']])
+                else:
+                    # Append to the path using '-' as a delimiter
+                    path = "-".join([path, ":".join([log['state_from'], log['state_to']])])
+        return path
+
+    def euler_string(process):
+        euler_string = ''
+        for log in process:
+            if log['action'] == 'Request':
+                if log['state_from'] == 'user':
+                    euler_string = '1'+log['state_to']
+                else:
+                    euler_string = '-'.join([euler_string, '1'+log['state_to']])
+            elif log['action'] == 'Response':
+                euler_string = '-'.join([euler_string, '0'+log['state_from']])
+        return euler_string
+
+    def process_row(process):
+        return (request_path(process), euler_string(process))
+
+    return spark.createDataFrame(logs_df.rdd.sortBy(lambda x: x['time']) \
+                            .groupBy(lambda x: x['process_id']) \
+                            .mapValues(process_row) \
+                            .map(lambda x: Row(process_id=x[0], 
+                                               request_path=x[1][0], 
+                                               euler_string=x[1][1]))
+                            )
+
+
+def add_depth_features(logs_df, processes_df):
     """
     Creates a logs DataFrame with an additional 'depth_from' column indicating the depth of of the server that performs the 
     Request or gives the Response.
@@ -144,7 +149,7 @@ def add_depth_to_df(logs_df, processes_df):
 
     return logs_with_depth_df, processes_with_depth_df
 
-def add_cluster_request_path_and_cluster_to_depth(processes_df, servers_with_cluster_df):
+def add_cluster_features(processes_df, servers_with_cluster_df):
     # Convert the servers_mapping_df to a dictionary and broadcast it
     server_to_cluster_dict = dict(servers_with_cluster_df.rdd.map(lambda x: (x['server_name'], x['cluster_id'])).distinct().collect())
     broadcast_server_to_cluster_dict = processes_df.rdd.context.broadcast(server_to_cluster_dict)
@@ -162,37 +167,40 @@ def add_cluster_request_path_and_cluster_to_depth(processes_df, servers_with_clu
                         replace_servers_with_clusts_list(map_values(col("depth_to_servers"))))
     )
 
-    # Step 2: Replace servers by clusters in request_path
+    # Step 2: Replace servers by clusters in request_path and euler string
+
     @udf(returnType=ArrayType(StringType()))
-    def replace_servers_with_clusters(segments):
+    def replace_request_path(segments):
         mapping = broadcast_server_to_cluster_dict.value
         return [":".join([mapping.get(server, server) for server in segment.split(":")]) for segment in segments]
 
     # Split request_path into individual edges, apply udf function an reconstruct the request path
     processes_df = processes_df.withColumn(
         "cluster_request_path", 
-        concat_ws("-", replace_servers_with_clusters(split(col("request_path"), "-")))
+        concat_ws("-", replace_request_path(split(col("request_path"), "-")))
+    )
+
+    @udf(returnType=ArrayType(StringType()))
+    def replace_euler_sting(segments):
+        mapping = broadcast_server_to_cluster_dict.value
+        return [segment[0] + mapping.get(segment[1:], segment[1:]) for segment in segments]
+
+    processes_df = processes_df.withColumn(
+        "cluster_euler_string", 
+        concat_ws("-", replace_euler_sting(split(col("euler_string"), "-")))
     )
     return processes_df
 
-def add_processes_elements(processes_df, logs_df, servers_with_cluster_df):
+
+def add_processes_elements(spark, processes_df, cluster_logs_df):
 
     # Change state_to and state_from in logs to their clusters ids
-    logs_df = logs_df.join(servers_with_cluster_df, logs_df.state_from == servers_with_cluster_df.server_name).select(
-        logs_df["*"], servers_with_cluster_df["cluster_id"].alias("cluster_from")
-    )
-    logs_df = logs_df.join(servers_with_cluster_df, logs_df.state_to == servers_with_cluster_df.server_name).select(
-        logs_df["*"], servers_with_cluster_df["cluster_id"].alias("cluster_to")
-    )
-
-    # Join processes with requests 
-    merged_df = processes_df.join(logs_df.filter(logs_df["action"]=="Request"), on="process_id")
-
-    # Group by process_id and server_from, and collect list of server_to
-    result_df = merged_df.groupBy("process_id", "cluster_from").agg(collect_list("cluster_to").alias("cluster_to_list"))
+    result_df = processes_df.join(cluster_logs_df.filter(cluster_logs_df["action"]=="Request"), on="process_id"     # join processes with requests
+                            ).groupBy("process_id", "cluster_from" 
+                            ).agg(collect_list("cluster_to").alias("cluster_to_list")) # collect list of server_to
     
     # Broadcast a dictionary that assigns to a pair process_id, cluster_from the list of all cluster_to
-    broadcast_dict = processes_df.rdd.context.broadcast(
+    broadcast_dict = spark.sparkContext.broadcast(
         {row['process_id']+'_'+row['cluster_from']: row['cluster_to_list'] for row in result_df.collect()}
     ) 
 
@@ -208,8 +216,75 @@ def add_processes_elements(processes_df, logs_df, servers_with_cluster_df):
         return result
 
     processes_df = processes_df.withColumn(
-        "elements", 
+        "cluster_elements", 
         create_elements(col("process_id"), col("depth_to_clusters"))
     )
 
     return processes_df
+
+def equal_processes(spark, processes_with_elements_df, cluster_logs_df, dataset_name):
+
+    equal_processes = processes_with_elements_df.groupBy("cluster_euler_string"
+                                                         ).agg(collect_list("process_id").alias("equal_processes")) \
+                                                .withColumn("group_processes_id", monotonically_increasing_id())\
+                                                .withColumn("process", explode("equal_processes"))
+
+
+    logs_with_grouped_processes = cluster_logs_df.join(
+        equal_processes,
+        cluster_logs_df.process_id == equal_processes.process,
+        how="left"
+    ).select(
+        col("cluster_from").alias("state_from"),
+        col("cluster_to").alias("state_to"),
+        col("time").cast(IntegerType()).alias("time"),
+        col("action"),
+        col("group_processes_id").alias("process_id")
+    ).orderBy("time"
+    ).groupBy("process_id", "state_from", "state_to", "action"
+    ).agg(first(col("time")).alias("time")
+    ).select(
+        col("state_from"),
+        col("state_to"),
+        col("time"),
+        col("action"),
+        col("process_id").alias("process_id")
+    ).orderBy("time")
+
+    logs_with_grouped_processes.show()
+
+    logs_with_grouped_processes.write.json(path="../Data/" + dataset_name+ "_part1Output.txt",
+                                           mode="overwrite")
+    
+    
+
+
+    """ path = "..Data/" + dataset_name
+    with open(path + "_part1Output", "w") as f: """
+
+
+
+    """ process_hashingTF = HashingTF(inputCol="cluster_elements", outputCol="features", numFeatures=512)
+    features_process_df = process_hashingTF.transform(processes_with_elements_df)
+
+    # Add a column to servers df indicating the hashes of the columns of the signature/representation matrix.
+    process_mh = MinHashLSH(inputCol="features", outputCol="hashes", numHashTables=5)
+    process_model = process_mh.fit(features_process_df)
+    #transformedData = process_model.transform(features_process_df)  
+    process_clusters = process_dbscan(spark=spark, 
+                                      df=features_process_df.drop("depth_to_servers", "depth_to_clusters"),
+                                      approx_dist_model=process_model,
+                                      epsilon=0.02,
+                                      min_pts= 2
+                                      ).select(col("process_id").alias("process_id"), col("component"))
+    process_clusters.show()
+
+    process_clusters = process_clusters.join(processes_with_elements_df, 
+                                             process_clusters.process_id == processes_with_elements_df.process_id, 
+                                             how="left").select(
+        col("process_id"), col("component"), col("cluster_euler_string")
+    )
+
+    components = process_clusters.groupBy("component", "cluster_euler_string").agg(collect_list("point").alias("processes_in_component"))
+    components.show() """
+  

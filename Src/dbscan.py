@@ -31,7 +31,7 @@ def __scan(epsilon, dist, operations):
             for j in range(i + 1, partition_len):
                 """ if operations is not None:
                     operations.add() """
-                if dist(partition_data[i].id, partition_data[j].id) < epsilon:
+                if dist(partition_data[i].id, partition_data[j].id) <= epsilon:
                     # both i and j are within epsilon distance to each other
                     if partition_data[i].id in out:
                         out[partition_data[i].id].add(partition_data[j].id)
@@ -128,7 +128,7 @@ def __get_dist(broadcast_distances):
     return dist
         
 def process_dbscan(spark, df, approx_dist_model, epsilon, min_pts, 
-                   id_column_name="process_id", value_column_name="cluster_request_path"):
+                   id_column_name="process_id", value_column_name="cluster_euler_string"):
 
     distances = approx_dist_model.approxSimilarityJoin(
                         datasetA=df,
@@ -139,10 +139,15 @@ def process_dbscan(spark, df, approx_dist_model, epsilon, min_pts,
                             F.col("datasetB."+id_column_name).alias("id_B"),
                             F.col("distance")
                         )
-    broadcast_distances = spark.sparkContext.broadcast({ (row.id_A, row.id_B): row.distance for row in distances.collect() })
+    broadcast_distances = spark.sparkContext.broadcast(
+        { (row.id_A, row.id_B): row.distance for row in distances.collect() }
+    )
     oldColumns = [id_column_name, value_column_name]
     newColumns = ["id", "value"]
-    df = reduce(lambda data, idx: data.withColumnRenamed(oldColumns[idx], newColumns[idx]), range(len(oldColumns)), df)
+    df = reduce(lambda data, idx: data.withColumnRenamed(
+        oldColumns[idx], newColumns[idx]), range(len(oldColumns)),
+        df
+    )
     dist = __get_dist(broadcast_distances=broadcast_distances)
     return process(spark, df, epsilon, min_pts, dist, checkpoint_dir="checkpoint")
 

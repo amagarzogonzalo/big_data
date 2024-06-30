@@ -1,5 +1,10 @@
 from pyspark.sql.functions import col
 
+def lower_triangle_matrix_index(i, j):
+    # Ensure that we are only accesing elements in the lower triangle matrix.
+    assert j>=0 and i>j
+    return int((i-1)*(i-2)*(1/2) + j)
+
 def jaccard_similarity(a, b):
     assert type(a)==set and type(b)==set
     return len(a.intersection(b)) / len(a.union(b))
@@ -24,9 +29,8 @@ def check_distance_simetry(distances):
     # Check that there are now columns with different distances
     return joined_df.filter(col("JaccardDistance") != col("swapped_JaccardDistance")).rdd.isEmpty()
 
-def process_string_edit_distance(s, t, H, broadcasted_distances):
+def process_string_edit_distance(s, t, H):
     assert type(s)==str and type(t)==str
-    S = []
 
     # If the pair is already in the associative array, returns its distance.
     if (s, t) in H.keys():
@@ -38,59 +42,74 @@ def process_string_edit_distance(s, t, H, broadcasted_distances):
 
     # Trivial cases
     if len(s)==0:
-        return 2*len(splitted_t)
+        if len(splitted_t) == 1 and not splitted_t[0]:
+            return 0
+        return len(splitted_t)
     if len(t)==0:
-        return 2*len(splitted_s)
+        if len(splitted_s) == 1 and not splitted_s[0]:
+            return 0
+        return len(splitted_s)
     
     # Recursivity with one edge less
     s_prime = "-".join(splitted_s[:-1])
-    t_prime = "-".join(splitted_t[:-1])
-    k_a, H = process_string_edit_distance(s_prime, t_prime, H)  #substitution
-    k_b, H = process_string_edit_distance(s_prime, t, H) + 2    #insertion
-    k_c, H = process_string_edit_distance(s, t_prime, H) + 2    #deletion
+    t_prime = "-".join(splitted_t[:-1]) 
+    k_a = process_string_edit_distance(s_prime, t_prime, H)  #substitution
+    k_b = process_string_edit_distance(s_prime, t, H) + 1    #insertion
+    k_c = process_string_edit_distance(s, t_prime, H) + 1    #deletion
 
     # Account for server substitutions
-    if not splitted_s[-1] == splitted_t[-1]:
-        s_0 = splitted_s[-1].split(":")[0]
+    if splitted_s[-1] == splitted_t[-1]:
+        k_d = k_a
+    else:
+        k_d = k_a + 1
+
+        """ s_0 = splitted_s[-1].split(":")[0]
         t_0 = splitted_t[-1].split(":")[0]
         if not s_0 == t_0:
-            k_a += 1
-        s_1 = splitted_s[-1].split(":")[1]
+            distance_0 = broadcasted_distances.value.get((s_0, t_0), 1)
+            k_d += 1
+        t_1 = splitted_s[-1].split(":")[1]
         t_1 = splitted_t[-1].split(":")[1]    
-        if not s_1 == t_1:
-            k_a += 1
+        if not t_1 == t_1:
+            distance_1 = broadcasted_distances.value.get((t_1, t_1), 1)
+            k_d += 1 """
     
     # Choose the minimum of the three costs
-    c = min([k_a, k_b, k_c])
+    c = min([k_d, k_b, k_c])
 
     # If the operation selected is a substitution, append 
-    if c == k_a:
-        S.append(broadcasted_distances.get((s_0, t_0), 1))
-        S.append(broadcasted_distances.get((s_1, t_1), 1))
+    """ if c == k_d and not splitted_s[-1] == splitted_t[-1]:
+        if k_d - k_a < 2:
+            if not s_0 == t_0:
+                S.append(((s_0, t_0), distance_0))
+            if not t_1 == t_1:
+                S.append(((t_1, t_1), distance_1)) """
 
-    c = c - len(S) + sum(S)
+    #c = c - len(S) + sum([substitution[1] for substitution in S])
+    H[(s, t)] = c
+    return c
 
-    H[(s,t)] = c
+if __name__ == "__main__":
+    from setup_spark import session_spark
+    import random
 
-    return c, H
+    spark = session_spark()
+    sc = spark.sparkContext
 
-from setup_spark import session_spark
-import random
+    # Create a dictionary with keys (server_1, server_2) and random values in [0, 1]
+    servers = [chr(i) for i in range(ord('A'), ord('Z') + 1)]
+    distances = {(s1, s2): random.uniform(0, 1) for s1 in servers for s2 in servers}
 
-spark = session_spark()
-sc = spark.SparkContext()
+    # Broadcast the dictionary
+    broadcasted_distances = sc.broadcast(distances)
 
-# Create a dictionary with keys (server_1, server_2) and random values in [0, 1]
-servers = [chr(i) for i in range(ord('A'), ord('Z') + 1)]
-distances = {(s1, s2): random.uniform(0, 1) for s1 in servers for s2 in servers}
+    process_1 = "1A-1C-0C-1B-1E-1F-0F-0E-0B-0A"
+    process_2 = "1A-1B-1E-1F-0F-0E-1T-0T-0B-1C-1L-0L-0C-0A"
 
-# Broadcast the dictionary
-broadcasted_distances = sc.broadcast(distances)
+    memoization_dict = {}
+    substitution_list = []
 
-process_1 = "user:A-A:C-C:B"
-process_2 = "user:A-A:C-C:D"
+    d = process_string_edit_distance(process_1, process_2, 
+                                    H=memoization_dict)
 
-d, H = process_string_edit_distance(process_1, process_2, H={}, broadcasted_distances=broadcasted_distances)
-
-print(d)
-print(H)
+    print(d)
