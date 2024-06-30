@@ -20,7 +20,7 @@ This repository contains the implementation for the Data Intensive Systems proje
      ```
      python main.py
      ```
-   - Results and logs will be generated as specified in the `.json` configuration files.
+   - Results and logs will be generated as specified in the Data folder.
 
 2. **Generating Datasets**:
    - Use `data.py` to generate datasets required for experiments.
