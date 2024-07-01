@@ -195,9 +195,12 @@ def add_cluster_features(processes_df, servers_with_cluster_df):
 def add_processes_elements(spark, processes_df, cluster_logs_df):
 
     # Change state_to and state_from in logs to their clusters ids
-    result_df = processes_df.join(cluster_logs_df.filter(cluster_logs_df["action"]=="Request"), on="process_id"     # join processes with requests
-                            ).groupBy("process_id", "cluster_from" 
-                            ).agg(collect_list("cluster_to").alias("cluster_to_list")) # collect list of server_to
+    result_df = processes_df.join(
+        cluster_logs_df.filter(cluster_logs_df["action"]=="Request"), 
+        on="process_id"     # join processes with requests
+        ).groupBy(
+            "process_id", "cluster_from" 
+        ).agg(collect_list("cluster_to").alias("cluster_to_list")) # collect list of server_to
     
     # Broadcast a dictionary that assigns to a pair process_id, cluster_from the list of all cluster_to
     broadcast_dict = spark.sparkContext.broadcast(
@@ -299,19 +302,24 @@ def equal_processes(spark, processes_with_elements_df, cluster_logs_df, dataset_
         )
     observations.select("text").write.mode("overwrite").text(path="../Data/" + dataset_name+ "_part1Observations.txt")
 
-    equal_processes= equal_processes.drop("cluster_euler_string"
+    same_processes = equal_processes.drop("cluster_euler_string"
         ).join(
             processes_with_elements_df,
             equal_processes.equal_processes[0] == processes_with_elements_df.process_id,
             how="left"
-        ).select("group_processes_id", "cluster_elements", "cluster_euler_string")
+        ).withColumn(
+            "euler_string_elements",
+            split(col("cluster_euler_string"),"-")
+        ).select("group_processes_id",
+                 "cluster_euler_string",
+                 "euler_string_elements",
+                 "cluster_elements")
 
+    
     process_hashingTF = HashingTF(inputCol="cluster_elements", outputCol="features", numFeatures=512)
-    features_process_df = process_hashingTF.transform(equal_processes)
+    features_process_df = process_hashingTF.transform(same_processes)
     process_mh = MinHashLSH(inputCol="features", outputCol="hashes", numHashTables=5)
     process_model = process_mh.fit(features_process_df)
-
-    processes_with_elements_df.show()
 
     #transformedData = process_model.transform(features_process_df)  
     process_minhash_clusters = minhash_dbscan(
@@ -320,9 +328,7 @@ def equal_processes(spark, processes_with_elements_df, cluster_logs_df, dataset_
         approx_dist_model=process_model,
         epsilon=0.5,
         min_pts= 2
-        ).select(
-            col("point").alias("group_processes_id"), 
-            col("component").alias("minhash_cluster"))
+        ).select(col("point").alias("group_processes_id"), col("component").alias("minhash_cluster"))
 
     # Add cluster_euler_distance   
     process_minhash_clusters = process_minhash_clusters.join(
@@ -334,21 +340,67 @@ def equal_processes(spark, processes_with_elements_df, cluster_logs_df, dataset_
             process_minhash_clusters["minhash_cluster"], 
             equal_processes["cluster_euler_string"])
 
-    minhash_clusters = process_minhash_clusters.select("minhash_cluster").rdd.distinct().collect()
-    print(minhash_clusters)
-
-    for mh_cluster in minhash_clusters:
+    text_df = spark.createDataFrame(
+        [],
+        schema = StructType([StructField("text", StringType(), True)])
+        )
+    for mh_cluster in process_minhash_clusters.select("minhash_cluster").rdd.distinct().collect():
+        
         process_edit_distance_clusters = process_edit_distance_dbscan(
             spark=spark,
             df=process_minhash_clusters.filter(
                 process_minhash_clusters.minhash_cluster == mh_cluster.__getitem__("minhash_cluster")
                 ),
-            epsilon=10,
+            epsilon=6,
             min_pts = 2
         ).select(
                 col("point").alias("group_processes_id"), 
-                col("component").alias("ped_cluster"))
-        process_edit_distance_clusters.show()
+                col("component").alias("ped_cluster")
+        )
 
+        processes_with_ped_clusters = process_edit_distance_clusters.join(
+            process_edit_distance_clusters.groupBy("ped_cluster").agg(
+                    collect_list("group_processes_id").alias("clustered_processes")
+                    ), 
+            on= "ped_cluster"
+        )
+
+        exploded_processes_with_ped_clusters= processes_with_ped_clusters.withColumn("process_group", explode("clustered_processes")) \
+            .drop("group_processes_id")
+
+        processes_with_ped_clusters = exploded_processes_with_ped_clusters.join(
+            logs_with_group_process_id.drop("ped_cluster"),
+            on = exploded_processes_with_ped_clusters.process_group == logs_with_group_process_id.group_processes_id 
+            )
+
+        observations = processes_with_ped_clusters.withColumn(
+            "row_text",
+            row_text(
+                    col("cluster_from"), 
+                    col("cluster_to"),
+                    col("time"),
+                    col("action"),
+                    col("group_processes_id")
+                    )
+            ).orderBy( "time"
+            ).groupBy( "group_processes_id"
+            ).agg(
+                any_value("ped_cluster").alias("ped_cluster"),
+                any_value("clustered_processes").alias("clustered_processes"),
+                concat(process_id_str(any_value("group_processes_id")), 
+                    concat_ws("", collect_list("row_text"))).alias("process_text")
+            ).groupBy( "ped_cluster", "clustered_processes"
+            ).agg(
+                observations_group(
+                    col("ped_cluster"),
+                    col("clustered_processes"),
+                    concat_ws("", collect_list("process_text"))
+                ).alias("text")
+            )
+        
+        observations.show()
+        text_df.union(observations.select("text"))
+
+    text_df.select("text").write.mode("overwrite").text(path="../Data/" + dataset_name+ "_part2Observations.txt")
 
   
